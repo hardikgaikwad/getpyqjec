@@ -1,0 +1,210 @@
+.downloadPage {
+  min-height: 100vh;
+  background-color: #000000;
+  width: 100%;
+  display: flex;
+  margin-bottom: 35px;
+  flex-direction: column;
+}
+
+.container {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 2%;
+  margin-bottom: 2%;
+  background: linear-gradient(145deg, #1a1a1a, #2d2d2d);
+  border-radius: 20px;
+  padding: 20px 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 100px rgba(99, 102, 241, 0.1);
+  max-width: 650px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.heading {
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 35px;
+  font-size: 2.5em;
+  letter-spacing: 3px;
+  background: linear-gradient(45deg, #6366f1, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+.form {
+  width: 100%;
+}
+
+.formRow {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.formGroup {
+  flex: 1;
+  margin-bottom: 25px;
+  justify-content: center;
+}
+
+select option {
+  background-color: #1a1a1a;
+  color: #ffffff;
+}
+
+.label {
+  color: #e0e0e0;
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.select,
+.manualYear {
+  width: 100%;
+  padding: 12px 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.select:focus,
+.manualYear:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: #6366f1;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+.yearGroup {
+  gap: 10px;
+  align-items: center;
+}
+
+.toYear {
+  width: 49%;
+}
+
+.yearSelect {
+  flex: 1;
+}
+
+.manualYear {
+  flex: 1;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 15px;
+  margin-top: 35px;
+}
+
+.submitBtn,
+.resetBtn {
+  flex: 1;
+  padding: 14px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.submitBtn {
+  background: linear-gradient(45deg, #6366f1, #8b5cf6);
+  color: white;
+  box-shadow: 0 5px 20px rgba(99, 102, 241, 0.3);
+}
+
+.submitBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+}
+
+.resetBtn {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.resetBtn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Chrome, Safari, Edge, Opera */
+.manualYear::-webkit-outer-spin-button,
+.manualYear::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+.manualYear[type="number"] {
+  -moz-appearance: textfield;
+}
+
+@media (max-width: 520px) {
+  .downloadPage {
+    padding: 0 20px;
+  }
+
+  .container {
+    margin: 20px auto;
+    padding: 30px 20px;
+  }
+
+  .heading {
+    font-size: 2em;
+    letter-spacing: 2px;
+  }
+
+  .formRow {
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 0 !important;
+  }
+
+  .formGroup {
+    margin-bottom: 15px !important;
+  }
+
+  .formRow:last-child .formGroup:last-child {
+    margin-bottom: 0;
+  }
+
+  .buttonGroup {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .toYear {
+    width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .downloadPage {
+    padding: 0 15px;
+  }
+
+  .container {
+    padding: 25px 15px;
+  }
+
+  .submitBtn,
+  .resetBtn {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}
