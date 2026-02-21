@@ -29,7 +29,7 @@ export default function NavBar() {
         </NavLink>
 
         <NavLink
-          to="/profile"
+          to="profile?mode=signin"
           className={({ isActive }) =>
             `${classes["navbar-link"]} ${classes["profile-link"]} ${
               isActive ? classes.active : ""
