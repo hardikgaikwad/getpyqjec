@@ -8,6 +8,7 @@ export default function LoginForm() {
   const [form, setForm] = useState({
     email: "",
     rollno: "",
+    name : "",
     password: "",
     identifier: "",
   });
@@ -52,8 +53,26 @@ export default function LoginForm() {
                 name="rollno"
                 type="text"
                 className={styles.input}
-                placeholder="Roll number"
+                placeholder="0201IT221015"
                 value={form.rollno}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          )}
+
+          {!isLogin && (
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="rollno">
+                Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                className={styles.input}
+                placeholder="Full Name"
+                value={form.name}
                 onChange={handleChange}
                 required
               />
