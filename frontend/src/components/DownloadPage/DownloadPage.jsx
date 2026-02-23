@@ -43,7 +43,7 @@ export default function DownloadPage() {
         </div>
       )}
 
-      {!isLoading && error && <ErrorPage />}
+      {!isLoading && error && <ErrorPage message={error.message} />}
 
       {!isLoading && !error && fetchedData && (
         <DataArea url={fetchedData} />

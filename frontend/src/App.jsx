@@ -5,6 +5,8 @@ import RootLayout from "./components/Root/Root";
 import LoginForm from "./components/LoginForm/LoginForm";
 import ErrorPage from "./components/ErrorPage/Error";
 
+import {action as loginAction} from "./components/LoginForm/LoginForm";
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -12,8 +14,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DownloadPage />, errorElement: <ErrorPage /> },
       { path: "upload", element: <UploadDataPage />, errorElement: <ErrorPage /> },
-      { path: "profile", element: <LoginForm />, errorElement: <ErrorPage /> },
-      { path: "*", element: <ErrorPage msg = "Page not found" /> },
+      { path: "profile",action:loginAction, element: <LoginForm />, errorElement: <ErrorPage /> },
+      { path: "*", element: <ErrorPage message = "Page not found" status = {404} /> },
     ],
   },
 ]);
