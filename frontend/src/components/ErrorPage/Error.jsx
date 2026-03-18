@@ -1,4 +1,18 @@
-const ErrorPage = ({msg}) => {
+import { useRouteError } from "react-router-dom";
+
+const ErrorPage = ({message, status}) => {
+  // Try to get error from React Router (when used as errorElement)
+  let routeError = null;
+  try {
+    routeError = useRouteError();
+  } catch (e) {
+    // Not inside a React Router error boundary — ignore
+  }
+
+  // Props take priority, then fall back to route error info
+  console.log("RouteError is: ",routeError);
+  const errorMessage = message || routeError?.data || routeError?.message || routeError?.statusText || "An unexpected error occurred";
+  const errorStatus = status || routeError?.status || null;
   return (
     <div style={{
       minHeight: '100vh',
@@ -41,6 +55,23 @@ const ErrorPage = ({msg}) => {
           </div>
         </div>
 
+        {/* Error Status Code */}
+        {errorStatus && (
+          <div style={{
+            fontSize: '5em',
+            fontWeight: '900',
+            lineHeight: '1',
+            marginBottom: '10px',
+            background: 'linear-gradient(45deg, #ef4444, #f97316)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            letterSpacing: '-2px',
+            filter: 'drop-shadow(0 0 20px rgba(239, 68, 68, 0.3))'
+          }}>
+            {errorStatus}
+          </div>
+        )}
+
         {/* Error Title */}
         <h1 style={{
           color: '#ffffff',
@@ -55,16 +86,6 @@ const ErrorPage = ({msg}) => {
           Oops! Something went wrong
         </h1>
 
-        {/* Error Message */}
-        <p style={{
-          color: '#d1d5db',
-          fontSize: '16px',
-          lineHeight: '1.6',
-          marginBottom: '30px',
-          fontWeight: '400'
-        }}>
-          {msg}
-        </p>
 
         {/* Error Details */}
         <div style={{
@@ -80,7 +101,7 @@ const ErrorPage = ({msg}) => {
             margin: 0,
             fontWeight: '500'
           }}>
-            <strong>Error:</strong> {msg ? msg : "Failed to fetch PYQ data from server"}
+            <strong>Error:</strong> {errorMessage}
           </p>
         </div>
 
