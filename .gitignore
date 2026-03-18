@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Django
+db.sqlite3
+staticfiles/
+
+# Project data (VERY IMPORTANT)
+data/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Frontend build
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
