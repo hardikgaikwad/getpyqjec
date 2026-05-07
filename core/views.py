@@ -3,8 +3,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import render
+from django.contrib.auth import authenticate
 
 import os
 from datetime import datetime, timezone
@@ -27,11 +29,11 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-
 # Create your views here.
 
 def react_app(request):
     return render(request, "index.html")
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -43,9 +45,43 @@ class RegisterView(APIView):
         
         refresh = RefreshToken.for_user(user)
         
-        return Response(
+        response = Response({
+            "access": str(refresh.access_token),
+            "user": {
+                "rno": user.rno,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+            }
+        }, status=201)
+        
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh),
+            httponly=True,
+            secure=False, #change to True in prodcution
+            samesite="Lax", #change to Strict in production
+            path="/",
+        )
+        
+        return response
+        
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        rno = request.data.get("rno")
+        password = request.data.get("password")
+        
+        user = authenticate(request, username=rno, password=password)
+        
+        if user is None:
+            return Response({"error": "Invalid credentials"}, status=401)
+        
+        refresh = RefreshToken.for_user(user)
+        
+        response = Response(
             {
-                "refresh": str(refresh),
                 "access": str(refresh.access_token),
                 "user": {
                     "rno": user.rno,
@@ -54,8 +90,46 @@ class RegisterView(APIView):
                     "role": user.role,
                 },
             },
-            status=status.HTTP_201_CREATED,
+            status=200,
         )
+        
+        # set HttpOnly cookie
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh),
+            httponly=True,
+            secure=False, # True in production
+            samesite="Lax",
+        )
+        
+        return response
+    
+class RefreshView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        
+        if not refresh_token:
+            return Response({"error": "No refresh token"}, status=401)
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            access = str(refresh.access_token)
+            
+            return Response({"access": access}, status=200)
+        
+        except TokenError as e:
+            print("TokenError:", str(e))
+            return Response({"error": "Invalid refresh token"}, status=401)
+        
+class LogoutView(APIView):
+    def post(self, request):
+        response = Response({"message": "Logged out"}, status=200)
+        
+        response.delete_cookie("refresh_token")
+        
+        return response
         
 class UploadPYQView(APIView):
     permission_classes = [IsAuthenticated]
@@ -195,3 +269,55 @@ class DownloadPYQView(APIView):
             filename=filename,
             content_type="application/pdf"
         )
+    
+    
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+
+token_generator = PasswordResetTokenGenerator()
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get("email")
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"message": "If account exists, reset link sent"})
+        
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = token_generator.make_token(user)
+        
+        reset_link = f"http://localhost:8000/reset-password/{uid}/{token}/"
+        
+        # TODO : send email
+        print("Reset link:", reset_link) # for now
+        
+        return Response({"message": "Reset link set"})
+    
+from django.utils.http import urlsafe_base64_decode
+    
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request, uid, token):
+        try:
+            user_id = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=user_id)
+        except Exception:
+            return Response({"error": "Invalid link"}, status=400)
+        
+        if not token_generator.check_token(user, token):
+            return Response({"error": "Invalid or expired token"}, status=400)
+        
+        new_password = request.data.get("password")
+        if not new_password:
+            return Response({"error": "Password required"}, status=400)
+        
+        user.set_password(new_password)
+        user.save()
+        
+        return Response({"message": "Password reset successful"})
