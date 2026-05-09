@@ -8,9 +8,7 @@ const ErrorPage = ({message, status}) => {
   } catch (e) {
     // Not inside a React Router error boundary — ignore
   }
-
   // Props take priority, then fall back to route error info
-  console.log("RouteError is: ",routeError);
   const errorMessage = message || routeError?.data || routeError?.message || routeError?.statusText || "An unexpected error occurred";
   const errorStatus = status || routeError?.status || null;
   return (
