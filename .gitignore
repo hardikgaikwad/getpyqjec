@@ -1,18 +1,23 @@
-# Python cache
+# Python
+venv/
 __pycache__/
 *.pyc
-
-# Database
-db.sqlite3
-
-# Environment
 .env
-venv/
-env/
 
-# IDE
-.vscode/
-.idea/
+# Django
+db.sqlite3
+staticfiles/
 
-# Node (frontend)
+# Project data (VERY IMPORTANT)
+data/
+
+# Node
 node_modules/
+frontend/node_modules/
+
+# Frontend build
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
