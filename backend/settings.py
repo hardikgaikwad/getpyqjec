@@ -150,3 +150,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+
+## Email Configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'opensourcejec@gmail.com'
+EMAIL_HOST_PASSWORD = 'fchh exwb kpoe qplm'
+DEFAULT_FROM_EMAIL = 'GetPYQ <opensourcejec@gmail.com>'
