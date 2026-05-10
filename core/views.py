@@ -275,6 +275,8 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
+from django.core.mail import send_mail
+
 token_generator = PasswordResetTokenGenerator()
 
 class RequestPasswordResetView(APIView):
@@ -291,12 +293,16 @@ class RequestPasswordResetView(APIView):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = token_generator.make_token(user)
         
-        reset_link = f"http://localhost:8000/reset-password/{uid}/{token}/"
+        reset_link = f"http://localhost:8000/auth/reset-password/{uid}/{token}/"
         
-        # TODO : send email
-        print("Reset link:", reset_link) # for now
+        send_mail(
+            subject="Reset your GetPYQ password",
+            message=f"Hello {user.name},\nClick the link to reset your password:\n{reset_link}\n\nIf you did not request this, ignore this email.",
+            from_email=None,
+            recipient_list=[user.email],
+        )
         
-        return Response({"message": "Reset link set"})
+        return Response({"message": "Reset link sent"})
     
 from django.utils.http import urlsafe_base64_decode
     
