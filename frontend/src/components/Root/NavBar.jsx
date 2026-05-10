@@ -1,7 +1,15 @@
 import classes from "./NavBar.module.css";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../../store/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function NavBar() {
+  const { isLoggedIn, user, logout } = useAuth();
+  const navigate = useNavigate();
+  async function handleLogout() {
+    await logout();
+    navigate("/");
+  }
   return (
     <nav className={classes.navbar}>
       <NavLink to="" className={()=>classes["download-link"]}>
@@ -27,7 +35,25 @@ export default function NavBar() {
         >
           UPLOAD
         </NavLink>
-
+          {isLoggedIn ? (
+            <>
+            <span style={{ color: "#fff", fontSize: "0.9rem" }}>
+              {user?.name}
+            </span>
+            <button
+              onClick={handleLogout}
+              className={classes["navbar-link"]}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "1rem",
+              }}
+            >
+              LOGOUT
+            </button>
+          </>) : (
         <NavLink
           to="profile?mode=login"
           className={({ isActive }) =>
@@ -50,6 +76,7 @@ export default function NavBar() {
             ></path>
           </svg>
         </NavLink>
+        )}
       </div>
     </nav>
   );

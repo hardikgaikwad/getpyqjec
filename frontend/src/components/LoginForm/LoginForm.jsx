@@ -1,16 +1,20 @@
 import {
   NavLink,
   useSearchParams,
-  redirect,
+  useNavigate,
   Form,
   useNavigation,
   useActionData,
 } from "react-router-dom";
+import { useEffect } from "react";
 import styles from "./LoginForm.module.css";
+import { useAuth } from "../../store/AuthContext";
 
 export default function LoginForm() {
   const navigation = useNavigation();
   const actionData = useActionData();
+  const { login } = useAuth();
+  const navigate = useNavigate();
   const isSubmitting = navigation.state === "submitting";
   const [searchParams] = useSearchParams();
   const mode = searchParams.get("mode");
@@ -20,6 +24,12 @@ export default function LoginForm() {
     error.status = 400;
     throw error;
   }
+  useEffect(() => {
+    if (actionData?.success) {
+      login(actionData.access, actionData.user);
+      navigate("/");
+    }
+  }, [actionData, login, navigate]);
 
   return (
     <div className={styles.loginPage}>
@@ -29,18 +39,18 @@ export default function LoginForm() {
         <Form method="post" className={styles.form}>
           {!isLogin && (
             <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              className={styles.input}
-              placeholder="you@example.com"
-              required
-            />
-          </div>
+              <label className={styles.label} htmlFor="email">
+                Email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                className={styles.input}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
           )}
           <div className={styles.formGroup}>
             <label className={styles.label} htmlFor="rollno">
@@ -86,6 +96,15 @@ export default function LoginForm() {
               minLength={6}
             />
           </div>
+          {isLogin && (
+            <NavLink
+              to="/forgot-password"
+              className={styles.switchLink}
+              style={{ fontSize: "13px", marginBottom: "8px" }}
+            >
+              Forgot Password?
+            </NavLink>
+          )}
           {actionData?.error && (
             <p className={styles.errorText}>{actionData.error}</p>
           )}
@@ -136,18 +155,20 @@ export async function action({ request }) {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify(body),
     });
     if (!response.ok) {
       if (response.status < 500) {
         const errorData = await response.json();
-        return { error: errorData.detail || "Invalid credentials" };
+        return { error: errorData.error || errorData.detail || "Invalid credentials" };
       }
       throw new Response(response.statusText || "Server error", {
         status: response.status,
       });
     }
-    return redirect("/");
+    const data = await response.json();
+    return { success: true, access: data.access, user: data.user };
   } catch (error) {
     if (error instanceof Response) {
       throw error;
