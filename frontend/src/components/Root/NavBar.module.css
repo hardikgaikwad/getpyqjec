@@ -89,3 +89,58 @@
     display: none;
   }
 }
+
+.user-menu {
+  position: relative;
+}
+
+.user-icon {
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  filter: invert(1); /* makes the black SVG white */
+  transition: transform 0.2s ease;
+}
+
+.user-icon:hover {
+  transform: scale(1.1);
+}
+
+.dropdown {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background: linear-gradient(145deg, #1a1a1a, #2d2d2d);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.dropdown-name {
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-logout {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: left;
+  padding: 4px 0;
+  font-family: inherit;
+  transition: color 0.2s ease;
+}
+
+.dropdown-logout:hover {
+  color: #ef4444;
+}

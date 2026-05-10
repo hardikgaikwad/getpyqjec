@@ -2,17 +2,30 @@ import classes from "./NavBar.module.css";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../store/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import userIcon from "../../assets/user.svg";
 
 export default function NavBar() {
   const { isLoggedIn, user, logout } = useAuth();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
   const navigate = useNavigate();
   async function handleLogout() {
     await logout();
     navigate("/");
   }
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   return (
     <nav className={classes.navbar}>
-      <NavLink to="" className={()=>classes["download-link"]}>
+      <NavLink to="" className={() => classes["download-link"]}>
         <div className={classes["navbar-left"]}>
           <svg
             className={classes["navbar-logo"]}
@@ -35,47 +48,37 @@ export default function NavBar() {
         >
           UPLOAD
         </NavLink>
-          {isLoggedIn ? (
-            <>
-            <span style={{ color: "#fff", fontSize: "0.9rem" }}>
-              {user?.name}
-            </span>
-            <button
-              onClick={handleLogout}
-              className={classes["navbar-link"]}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                fontSize: "1rem",
-              }}
-            >
-              LOGOUT
-            </button>
-          </>) : (
-        <NavLink
-          to="profile?mode=login"
-          className={({ isActive }) =>
-            `${classes["navbar-link"]} ${classes["profile-link"]} ${
-              isActive ? classes.active : ""
-            }`
-          }
-        >
-          <span>PROFILE</span>
-          <svg
-            className={classes["profile-icon"]}
-            fill="none"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
+        {isLoggedIn ? (
+          <div ref={dropdownRef} className={classes["user-menu"]}>
+            <img
+              src={userIcon}
+              alt="User"
+              className={classes["user-icon"]}
+              onClick={() => setShowDropdown((prev) => !prev)}
+            />
+            {showDropdown && (
+              <div className={classes.dropdown}>
+                <span className={classes["dropdown-name"]}>{user?.name}</span>
+                <button
+                  onClick={handleLogout}
+                  className={classes["dropdown-logout"]}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <NavLink
+            to="profile?mode=login"
+            className={({ isActive }) =>
+              `${classes["navbar-link"]} ${classes["profile-link"]} ${
+                isActive ? classes.active : ""
+              }`
+            }
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 9l-7 7-7-7"
-            ></path>
-          </svg>
-        </NavLink>
+            <span>PROFILE</span>
+          </NavLink>
         )}
       </div>
     </nav>
