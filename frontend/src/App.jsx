@@ -7,7 +7,7 @@ import ErrorPage from "./components/ErrorPage/Error";
 import ForgotPassword from "./components/ForgotPassword/ForgotPassword";
 import ResetPassword from "./components/ResetPassword/ResetPassword";
 import { AuthProvider } from "./store/AuthContext";
-
+import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute";
 import { action as loginAction } from "./components/LoginForm/LoginForm";
 
 const router = createBrowserRouter([
@@ -18,7 +18,11 @@ const router = createBrowserRouter([
       { index: true, element: <DownloadPage />, errorElement: <ErrorPage /> },
       {
         path: "upload",
-        element: <UploadDataPage />,
+        element: (
+          <ProtectedRoute>
+            <UploadDataPage />
+          </ProtectedRoute>
+        ),
         errorElement: <ErrorPage />,
       },
       {
