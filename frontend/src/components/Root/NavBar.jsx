@@ -58,7 +58,9 @@ export default function NavBar() {
             />
             {showDropdown && (
               <div className={classes.dropdown}>
-                <span className={classes["dropdown-name"]}>{user?.name}</span>
+                <span className={classes["dropdown-name"]}>
+                  {"Hi " + user?.name?.split(" ")[0]}
+                </span>
                 <button
                   onClick={handleLogout}
                   className={classes["dropdown-logout"]}
