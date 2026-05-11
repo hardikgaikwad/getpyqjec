@@ -14,6 +14,8 @@ export default function DownloadPage() {
 
   const fetchFn = async (queryString) => {
     setIsLoading(true);
+    setError(null);       
+    setFetchedData(null); 
     try {
       const data = await fetchUrls(queryString);
       setFetchedData(data);
