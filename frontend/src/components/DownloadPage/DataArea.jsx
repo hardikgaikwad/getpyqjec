@@ -117,7 +117,7 @@ export default function DataArea({ url }) {
       </div>
       {error && (
         <div ref={errorRef}>
-          <ErrorPage msg={errorMessage}></ErrorPage>
+          <ErrorPage message={errorMessage}></ErrorPage>
         </div>
       )}
     </>

@@ -30,7 +30,10 @@ export default function UploadFormPYQ({ uploadFn }) {
   if (selectedValues.semester && selectedValues.branch) {
     const sem = selectedValues.semester;
     const branch = selectedValues.branch;
-    subjectsToShow.push(...subjects[branch][ordinals[sem]]);
+    subjectsToShow.push(
+      ["ALL SUBJECTS", "All"],
+      ...subjects[branch][ordinals[sem]],
+    );
   }
 
   // Handle file selection
@@ -81,7 +84,6 @@ export default function UploadFormPYQ({ uploadFn }) {
     }
   };
 
-
   // Handle submit
   async function handleSubmit(event) {
     event.preventDefault();
@@ -101,10 +103,10 @@ export default function UploadFormPYQ({ uploadFn }) {
     const formData = new FormData();
     formData.append("branch", selectedValues.branch);
     formData.append("semester", selectedValues.semester);
-    formData.append("session", selectedValues.session);
-    formData.append("subject", selectedValues.subject);
+    formData.append("exam_session", selectedValues.session);
+    formData.append("subject_code", selectedValues.subject);
     formData.append("year", selectedValues.year);
-    formData.append("pdfFile", finalFile);
+    formData.append("file", finalFile);
 
     try {
       await uploadFn(formData);
@@ -249,8 +251,8 @@ export default function UploadFormPYQ({ uploadFn }) {
                     : "Select branch and semester first"}
                 </option>
                 {subjectsToShow.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
+                  <option key={subject[0]} value={subject[1]}>
+                    {subject[0]}
                   </option>
                 ))}
               </select>

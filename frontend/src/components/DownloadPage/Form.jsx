@@ -45,10 +45,19 @@ export default function FormPYQ({ fetchFn }) {
       setSelectedValues({
         semester: "",
         branch: "",
+        subject: "",
+        fromYear: "",
+        toYear: "",
       });
-      event.target.reset();
     } catch (error) {
-      throw error
+      setSelectedValues({
+        semester: "",
+        branch: "",
+        subject: "",
+        fromYear: "",
+        toYear: "",
+      });
+      throw error;
     } finally {
       setFetching(false);
     }
@@ -160,7 +169,7 @@ export default function FormPYQ({ fetchFn }) {
               </label>
               <select
                 id="subject"
-                name="subject"
+                name="subject_code"
                 value={selectedValues.subject}
                 className={styles.select}
                 onChange={(e) =>
@@ -194,7 +203,7 @@ export default function FormPYQ({ fetchFn }) {
                     <input
                       type="text"
                       id="fromYearManual"
-                      name="fromYear"
+                      name="from_year"
                       className={styles.manualYear}
                       placeholder="Enter year (e.g., 2024)"
                       pattern="[0-9]{4}"
@@ -217,7 +226,7 @@ export default function FormPYQ({ fetchFn }) {
                     </label>
                     <select
                       id="fromYear"
-                      name="fromYear"
+                      name="from_year"
                       className={`${styles.yearSelect} ${styles.select}`}
                       value={selectedValues.fromYear}
                       onChange={(e) => {
@@ -280,7 +289,7 @@ export default function FormPYQ({ fetchFn }) {
                       </label>
                       <select
                         id="toYear"
-                        name="toYear"
+                        name="to_year"
                         className={`${styles.yearSelect} ${styles.select}`}
                         value={selectedValues.toYear}
                         onChange={(e) => {
@@ -319,7 +328,7 @@ export default function FormPYQ({ fetchFn }) {
                     </label>
                     <select
                       id="toYear"
-                      name="toYear"
+                      name="to_year"
                       className={styles.select}
                       value={selectedValues.toYear}
                       onChange={(e) =>
