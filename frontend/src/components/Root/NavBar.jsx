@@ -38,8 +38,17 @@ export default function NavBar() {
           <span className={classes["navbar-title"]}>OPEN SOURCE JEC</span>
         </div>
       </NavLink>
-
       <div className={classes["navbar-right"]}>
+        <NavLink
+          to="/"
+          className={({ isActive }) =>
+            `${classes["navbar-link"]} ${isActive ? classes.active : ""}`
+          }
+          end
+        >
+          GETPYQS
+        </NavLink>
+
         <NavLink
           to="/upload"
           className={({ isActive }) =>
