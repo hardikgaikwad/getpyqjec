@@ -1,5 +1,7 @@
+import { API_BASE } from "./config";
+
 const fetchUrls = async (queries) => {
-  const res = await fetch("http://localhost:8000/download/?" + queries);
+  const res = await fetch(`${API_BASE}/download/?` + queries);
   if (!res.ok) {
     const errorData = await res.json();
     throw new Error(errorData.error || "Failed to fetch data");
@@ -20,7 +22,7 @@ const fetchUrls = async (queries) => {
 const uploadData = async (data) => {
   let token = localStorage.getItem("access_token");
 
-  let res = await fetch("http://localhost:8000/upload/", {
+  let res = await fetch(`${API_BASE}/upload/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     credentials: "include",
@@ -29,7 +31,7 @@ const uploadData = async (data) => {
 
   // If 401, try refreshing the token
   if (res.status === 401) {
-    const refreshRes = await fetch("http://localhost:8000/auth/refresh/", {
+    const refreshRes = await fetch(`${API_BASE}/auth/refresh/`, {
       method: "POST",
       credentials: "include", // sends refresh cookie
     });
@@ -40,7 +42,7 @@ const uploadData = async (data) => {
       token = refreshData.access;
 
       // Retry the upload with new token
-      res = await fetch("http://localhost:8000/upload/", {
+      res = await fetch(`${API_BASE}/upload/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
