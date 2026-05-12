@@ -10,11 +10,15 @@ def get_pdfs(branch, semester, subject_code, from_year, to_year):
         branch,
         f"sem{semester}"
     )
+
+    all_years = set(range(from_year, to_year + 1))
     
     if not os.path.exists(base_path):
-        return []
+        return {"pdfs": [], "missing_years": sorted(all_years)}
     
     pdfs = []
+    found_years = set()
+    found_years.add(year)
     
     if subject_code and subject_code.lower() != "all":
         subject_dirs = [subject_code]
@@ -38,6 +42,7 @@ def get_pdfs(branch, semester, subject_code, from_year, to_year):
             
             if from_year <= year <= to_year:
                 pdfs.append(os.path.join(subj_path, file))
+                found_years.add(year)
                 
     def sort_key(path):
         subject_code = os.path.basename(os.path.dirname(path))
@@ -50,4 +55,5 @@ def get_pdfs(branch, semester, subject_code, from_year, to_year):
         return (subject_code, year, session_order)
     
     pdfs.sort(key=sort_key)
-    return pdfs
+    missing_years = sorted(all_years - found_years)
+    return {"pdfs": pdfs, "missing_years": missing_years}

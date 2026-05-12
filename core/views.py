@@ -241,20 +241,26 @@ class DownloadPYQView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        pdf_paths = get_pdfs(
+        result = get_pdfs(
             branch=branch.upper(),
             semester=semester,
             subject_code=subject_code,
             from_year=from_year,
             to_year=to_year,
         )
+
+        pdf_paths = result["pdfs"]
+        missing_years = result["missing_years"]
         
         if not pdf_paths:
             return JsonResponse(
-                {"error": "No PYQs for given selection"},
+                {
+                    "error": "No PYQs for given selection",
+                    "missing_years": missing_years,
+                },
                 status=status.HTTP_404_NOT_FOUND
             )
-            
+        
         merged_pdf = compile_pdfs(pdf_paths)
         
         filename = (
@@ -263,12 +269,19 @@ class DownloadPYQView(APIView):
             f"{from_year}-{to_year}.pdf"
         )
         
-        return FileResponse(
-            merged_pdf,
-            as_attachment=True,
-            filename=filename,
-            content_type="application/pdf"
-        )
+        response =  FileResponse(
+                        merged_pdf,
+                        as_attachment=True,
+                        filename=filename,
+                        content_type="application/pdf"
+                    )
+
+        if missing_years:
+            response["X-missing_years"] = ",".join(str(y) for y in missing_years)
+            response["Access-Control-Expose-Headers"] = "X-missing_years"
+
+        return response
+
     
     
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
