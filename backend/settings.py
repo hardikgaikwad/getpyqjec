@@ -30,8 +30,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-#ALLOWED_HOSTS = ["localhost", "127.0.0.1", "ipv4"]
-ALLOWED_HOSTS = []
+_host_ip = os.environ.get('VITE_HOST_IP', '')
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"] + ([_host_ip] if _host_ip else [])
 
 AUTH_USER_MODEL = 'core.User'
 
@@ -152,8 +152,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    #"http://ipv4:5173",
-]
+] + ([f"http://{_host_ip}:5173"] if _host_ip else [])
 CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ["Content-Disposition"]
 
