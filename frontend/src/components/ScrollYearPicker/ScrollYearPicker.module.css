@@ -1,0 +1,135 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Trigger button — styled like a select */
+.trigger {
+  width: 100%;
+  padding: 12px 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+  outline: none;
+  text-align: left;
+}
+
+.trigger:hover,
+.trigger:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: #6366f1;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+.arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  color: #9ca3af;
+}
+
+.arrowUp {
+  transform: rotate(180deg);
+}
+
+/* Popup container */
+.popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: linear-gradient(145deg, #1e1e2e, #2a2a3e);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.15);
+  padding: 6px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Picker drum */
+.picker {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.list {
+  height: 100%;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.list::-webkit-scrollbar {
+  display: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 18px;
+  scroll-snap-align: center;
+  transition: opacity 0.05s, transform 0.05s;
+  user-select: none;
+  cursor: pointer;
+}
+
+.highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: rgba(99, 102, 241, 0.15);
+  border-top: 1px solid rgba(99, 102, 241, 0.35);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.fadeTop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(30, 30, 46, 0.95) 0%,
+    rgba(30, 30, 46, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fadeBottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to top,
+    rgba(30, 30, 46, 0.95) 0%,
+    rgba(30, 30, 46, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}

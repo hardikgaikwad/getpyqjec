@@ -4,10 +4,14 @@ import {
   branches,
   subjects,
   semesters,
-  years,
   ordinals,
 } from "../../information";
 import createPdfFromImages from "../../imgTopdf";
+import ScrollYearPicker from "../ScrollYearPicker/ScrollYearPicker";
+
+// Generate current year + last 10 years (descending)
+const currentYear = new Date().getFullYear();
+const allYears = Array.from({ length: 11 }, (_, i) => currentYear - i);
 
 const initialState = {
   semester: "",
@@ -19,7 +23,6 @@ const initialState = {
 };
 
 export default function UploadFormPYQ({ uploadFn }) {
-  const [manualYear, setManualYear] = useState(false);
   const [selectedValues, setSelectedValues] = useState(initialState);
   const [fileType, setFileType] = useState("pdf");
   const [errorMessage, setErrorMessage] = useState("");
@@ -131,13 +134,11 @@ export default function UploadFormPYQ({ uploadFn }) {
 
     try {
       await uploadFn(formData);
-      setManualYear(false);
       setSelectedValues(initialState);
       event.target.reset();
       setUpload(false);
       alert("File Uploaded Successfully");
     } catch (error) {
-      setManualYear(false);
       setSelectedValues(initialState);
       event.target.reset();
       setUpload(false);
@@ -147,7 +148,6 @@ export default function UploadFormPYQ({ uploadFn }) {
   // Handle reset
   function handleReset(e) {
     e.preventDefault();
-    setManualYear(false);
     setSelectedValues(initialState);
     setErrorMessage("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -308,63 +308,18 @@ export default function UploadFormPYQ({ uploadFn }) {
           {/* Year */}
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
-              <div className={styles.yearGroup}>
-                {manualYear ? (
-                  <>
-                    <label htmlFor="yearManual" className={styles.label}>
-                      Year
-                    </label>
-                    <input
-                      type="number"
-                      id="yearManual"
-                      name="yearManual"
-                      className={styles.manualYear}
-                      placeholder="Enter year (e.g., 2025)"
-                      min="1900"
-                      max={years[0]}
-                      onChange={(e) => {
-                        setSelectedValues((prev) => ({
-                          ...prev,
-                          year: e.target.value, // this is already a string
-                        }));
-                      }}
-                      autoFocus
-                    />
-                  </>
-                ) : (
-                  <>
-                    <label htmlFor="year" className={styles.label}>
-                      Year
-                    </label>
-                    <select
-                      id="year"
-                      name="year"
-                      className={`${styles.yearSelect} ${styles.select}`}
-                      value={selectedValues.year}
-                      onChange={(e) => {
-                        const selectedValue = e.target.value;
-                        if (selectedValue === "true") setManualYear(true);
-                        else
-                          setSelectedValues((prev) => ({
-                            ...prev,
-                            year: selectedValue,
-                          }));
-                      }}
-                      required
-                    >
-                      <option value="" disabled hidden>
-                        Select Year
-                      </option>
-                      {years.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                      <option value="true">Type Manually</option>
-                    </select>
-                  </>
-                )}
-              </div>
+              <label className={styles.label}>Year</label>
+              <ScrollYearPicker
+                years={allYears}
+                value={selectedValues.year}
+                name="year"
+                onChange={(val) =>
+                  setSelectedValues((prev) => ({
+                    ...prev,
+                    year: val,
+                  }))
+                }
+              />
             </div>
 
             {/* File Upload */}
