@@ -10,13 +10,19 @@ const fetchUrls = async (queries) => {
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const disposition = res.headers.get("Content-Disposition");
-  console.log(disposition);
   let name = "pyq_download.pdf";
   if (disposition) {
     const match = disposition.match(/filename="?(.+?)"?$/);
     if (match) name = match[1];
   }
-  return { url, name };
+
+  // Parse missing years header
+  const missingHeader = res.headers.get("X-missing_years");
+  const missingYears = missingHeader
+    ? missingHeader.split(",").map((y) => y.trim())
+    : [];
+
+  return { url, name, missingYears };
 };
 
 const uploadData = async (data) => {

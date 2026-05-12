@@ -188,6 +188,30 @@ h1 {
   50% { opacity: 0.5; transform: scale(0.8); }
 }
 
+/* ── Missing Years Warning ── */
+.missing-years {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  font-size: 0.85em;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.missing-years strong {
+  color: #fcd34d;
+}
+
+.warning-icon {
+  font-size: 1.1em;
+  flex-shrink: 0;
+}
+
 /* ── Download Button ── */
 .download-btn {
   position: relative;

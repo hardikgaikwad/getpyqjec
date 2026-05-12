@@ -83,6 +83,16 @@ export default function DataArea({ url }) {
                   Ready to download
                 </span>
               </div>
+
+              {/* Missing years warning */}
+              {file.missingYears && file.missingYears.length > 0 && (
+                <div className={classes["missing-years"]}>
+                  <span className={classes["warning-icon"]}>⚠</span>
+                  <span>
+                    PYQs not available for: <strong>{file.missingYears.join(", ")}</strong>
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Download Button */}
