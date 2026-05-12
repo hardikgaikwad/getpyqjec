@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
+import { API_BASE } from "../../config";
 import styles from "../LoginForm/LoginForm.module.css"; // reuse login styles
 
 export default function ForgotPassword() {
@@ -15,7 +16,7 @@ export default function ForgotPassword() {
     setMessage("");
 
     try {
-      const res = await fetch("http://localhost:8000/auth/forgot-password/", {
+      const res = await fetch(`${API_BASE}/auth/forgot-password/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

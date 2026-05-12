@@ -7,6 +7,7 @@ import {
   useActionData,
 } from "react-router-dom";
 import { useEffect } from "react";
+import { API_BASE } from "../../config";
 import styles from "./LoginForm.module.css";
 import { useAuth } from "../../store/AuthContext";
 
@@ -150,7 +151,7 @@ export async function action({ request }) {
       body.name = formData.get("name");
     }
 
-    const response = await fetch("http://localhost:8000/auth/" + mode + "/", {
+    const response = await fetch(`${API_BASE}/auth/${mode}/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
