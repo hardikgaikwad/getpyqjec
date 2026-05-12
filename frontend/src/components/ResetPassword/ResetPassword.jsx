@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { API_BASE } from "../../config";
 import styles from "../LoginForm/LoginForm.module.css";
 
 export default function ResetPassword() {
@@ -17,7 +18,7 @@ export default function ResetPassword() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/auth/reset-password/${uid}/${token}/`,
+        `${API_BASE}/auth/reset-password/${uid}/${token}/`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

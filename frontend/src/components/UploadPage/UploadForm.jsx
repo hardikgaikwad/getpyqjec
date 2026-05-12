@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import styles from "./UploadForm.module.css";
 import {
   branches,
@@ -24,7 +24,28 @@ export default function UploadFormPYQ({ uploadFn }) {
   const [fileType, setFileType] = useState("pdf");
   const [errorMessage, setErrorMessage] = useState("");
   const [upload, setUpload] = useState(false);
+  const [dragIndex, setDragIndex] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Generate stable thumbnail URLs
+  const thumbnailUrls = useMemo(() => {
+    if (fileType !== "image") return [];
+    return selectedValues.files.map((file) => URL.createObjectURL(file));
+  }, [selectedValues.files, fileType]);
+
+  function handleDragStart(e, index) {
+    setDragIndex(index);
+  }
+
+  function handleDrop(e, dropIndex) {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === dropIndex) return;
+    const reordered = [...selectedValues.files];
+    const [dragged] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, dragged);
+    setSelectedValues((prev) => ({ ...prev, files: reordered }));
+    setDragIndex(null);
+  }
 
   const subjectsToShow = [];
   if (selectedValues.semester && selectedValues.branch) {
@@ -365,20 +386,56 @@ export default function UploadFormPYQ({ uploadFn }) {
               </select>
 
               {selectedValues.files.length > 0 ? (
-                <div className={styles.fileInfo}>
-                  <span className={styles.fileName}>
-                    {fileType === "pdf"
-                      ? selectedValues.files[0].name
-                      : `${selectedValues.files.length} images selected`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveFiles}
-                    className={styles.removeBtn}
-                  >
-                    Remove
-                  </button>
-                </div>
+                <>
+                  {fileType === "pdf" ? (
+                    <div className={styles.fileInfo}>
+                      <span className={styles.fileName}>
+                        {selectedValues.files[0].name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveFiles}
+                        className={styles.removeBtn}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={styles.imageList}>
+                      <p className={styles.imageListHeader}>
+                        {selectedValues.files.length} images selected — drag to reorder
+                      </p>
+                      {selectedValues.files.map((file, index) => (
+                        <div
+                          key={file.name + index}
+                          className={`${styles.imageItem} ${dragIndex === index ? styles.dragging : ""}`}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, index)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => handleDrop(e, index)}
+                        >
+                          <span className={styles.dragHandle}>☰</span>
+                          <img
+                            src={thumbnailUrls[index]}
+                            alt={file.name}
+                            className={styles.thumbnail}
+                          />
+                          <span className={styles.imageFileName}>
+                            {index + 1}. {file.name}
+                          </span>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleRemoveFiles}
+                        className={styles.removeBtn}
+                        style={{ marginTop: "8px", alignSelf: "flex-start" }}
+                      >
+                        Remove All
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <input
                   type="file"

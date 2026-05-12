@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { API_BASE } from "../config";
 
 const AuthContext = createContext({
   user: null,
@@ -31,7 +32,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     try {
-      await fetch("http://localhost:8000/auth/logout/", {
+      await fetch(`${API_BASE}/auth/logout/`, {
         method: "POST",
         credentials: "include", // sends the refresh_token cookie
       });

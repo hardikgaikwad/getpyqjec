@@ -192,6 +192,66 @@ select option {
   -moz-appearance: textfield;
 }
 
+/* Image drag-and-drop reorder list */
+.imageList {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imageListHeader {
+  color: #9ca3af;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.imageItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  cursor: grab;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.imageItem:active {
+  cursor: grabbing;
+}
+
+.imageItem.dragging {
+  background-color: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+  opacity: 0.7;
+}
+
+.dragHandle {
+  color: #6366f1;
+  font-size: 16px;
+  user-select: none;
+}
+
+.thumbnail {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.imageFileName {
+  color: #e0e0e0;
+  font-size: 13px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 @media (max-width: 520px) {
   .uploadPage {
     padding: 0 20px;
