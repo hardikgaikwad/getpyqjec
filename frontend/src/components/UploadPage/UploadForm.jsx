@@ -24,17 +24,24 @@ const initialState = {
 
 export default function UploadFormPYQ({ uploadFn }) {
   const [selectedValues, setSelectedValues] = useState(initialState);
-  const [fileType, setFileType] = useState("pdf");
   const [errorMessage, setErrorMessage] = useState("");
   const [upload, setUpload] = useState(false);
   const [dragIndex, setDragIndex] = useState(null);
+  const [showOverlay, setShowOverlay] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Detect file type from selected files
+  const detectedType = useMemo(() => {
+    if (selectedValues.files.length === 0) return null;
+    if (selectedValues.files[0].type === "application/pdf") return "pdf";
+    return "image";
+  }, [selectedValues.files]);
 
   // Generate stable thumbnail URLs
   const thumbnailUrls = useMemo(() => {
-    if (fileType !== "image") return [];
+    if (detectedType !== "image") return [];
     return selectedValues.files.map((file) => URL.createObjectURL(file));
-  }, [selectedValues.files, fileType]);
+  }, [selectedValues.files, detectedType]);
 
   function handleDragStart(e, index) {
     setDragIndex(index);
@@ -60,35 +67,57 @@ export default function UploadFormPYQ({ uploadFn }) {
     );
   }
 
-  // Handle file selection
+  // Handle file selection — auto-detect type
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
     setErrorMessage("");
+    if (selectedFiles.length === 0) return;
 
-    if (fileType === "pdf") {
+    // Check if files are all the same type
+    const hasPdf = selectedFiles.some((f) => f.type === "application/pdf");
+    const hasImage = selectedFiles.some((f) => ["image/png", "image/jpeg"].includes(f.type));
+
+    if (hasPdf && hasImage) {
+      setErrorMessage("Cannot mix PDF and image files. Select one type.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (hasPdf) {
+      // PDF mode
       if (selectedFiles.length > 1) {
         setErrorMessage("You can upload only 1 PDF file.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
       if (selectedFiles[0].size > 5 * 1024 * 1024) {
         setErrorMessage("PDF size must be ≤ 5MB.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-    } else if (fileType === "image") {
+    } else if (hasImage) {
+      // Image mode
       if (selectedFiles.length > 6) {
         setErrorMessage("You can upload up to 6 images only.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
       for (const file of selectedFiles) {
         if (file.size > 2 * 1024 * 1024) {
           setErrorMessage(`${file.name} exceeds 2MB size limit.`);
+          if (fileInputRef.current) fileInputRef.current.value = "";
           return;
         }
         if (!["image/png", "image/jpeg"].includes(file.type)) {
-          setErrorMessage(`${file.name} is not a PNG/JPG image.`);
+          setErrorMessage(`${file.name} is not a supported format.`);
+          if (fileInputRef.current) fileInputRef.current.value = "";
           return;
         }
       }
+    } else {
+      setErrorMessage("Unsupported file type. Use PDF, PNG, or JPG.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
     }
 
     setSelectedValues((prev) => ({
@@ -97,7 +126,7 @@ export default function UploadFormPYQ({ uploadFn }) {
     }));
   };
 
-  // Remove files
+  // Remove all files
   const handleRemoveFiles = () => {
     setSelectedValues((prev) => ({
       ...prev,
@@ -106,6 +135,19 @@ export default function UploadFormPYQ({ uploadFn }) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    setShowOverlay(false);
+  };
+
+  // Remove a single image by index
+  const handleRemoveOne = (index) => {
+    setSelectedValues((prev) => {
+      const updated = prev.files.filter((_, i) => i !== index);
+      if (updated.length === 0 && fileInputRef.current) {
+        fileInputRef.current.value = "";
+        setShowOverlay(false);
+      }
+      return { ...prev, files: updated };
+    });
   };
 
   // Handle submit
@@ -118,9 +160,9 @@ export default function UploadFormPYQ({ uploadFn }) {
     setUpload(true);
     let finalFile = null;
 
-    if (fileType === "pdf") {
+    if (detectedType === "pdf") {
       finalFile = selectedValues.files[0]; // single PDF
-    } else if (fileType === "image") {
+    } else if (detectedType === "image") {
       finalFile = await createPdfFromImages(selectedValues.files); // merged PDF
     }
 
@@ -156,15 +198,18 @@ export default function UploadFormPYQ({ uploadFn }) {
 
   return (
     <div className={styles.uploadPage}>
+      <h1 className={styles.heading}>Contribute Question Papers Instantly.</h1>
+      <p className={styles.subtitle}>
+        Help students access better resources by uploading verified PYQs
+      </p>
       <div className={styles.container}>
-        <h1 className={styles.heading}>UPLOAD</h1>
         <form
           id="pyqForm"
           onSubmit={handleSubmit}
           onReset={handleReset}
           className={styles.form}
         >
-          {/* Semester & Branch */}
+          {/* Row 1: Semester, Branch, Subject */}
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label htmlFor="semester" className={styles.label}>
@@ -245,10 +290,7 @@ export default function UploadFormPYQ({ uploadFn }) {
                 )}
               </select>
             </div>
-          </div>
 
-          {/* Subject & Session */}
-          <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label htmlFor="subject" className={styles.label}>
                 Subject
@@ -267,9 +309,7 @@ export default function UploadFormPYQ({ uploadFn }) {
                 required
               >
                 <option value="" disabled hidden>
-                  {selectedValues.branch && selectedValues.semester
-                    ? "Select the subject"
-                    : "Select branch and semester first"}
+                  Select the subject
                 </option>
                 {subjectsToShow.map((subject) => (
                   <option key={subject[0]} value={subject[1]}>
@@ -277,6 +317,24 @@ export default function UploadFormPYQ({ uploadFn }) {
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Row 2: Year, Session, Upload Papers */}
+          <div className={styles.formRow}>
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Year</label>
+              <ScrollYearPicker
+                years={allYears}
+                value={selectedValues.year}
+                name="year"
+                onChange={(val) =>
+                  setSelectedValues((prev) => ({
+                    ...prev,
+                    year: val,
+                  }))
+                }
+              />
             </div>
 
             <div className={styles.formGroup}>
@@ -303,46 +361,13 @@ export default function UploadFormPYQ({ uploadFn }) {
                 <option value="December">December</option>
               </select>
             </div>
-          </div>
 
-          {/* Year */}
-          <div className={styles.formRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Year</label>
-              <ScrollYearPicker
-                years={allYears}
-                value={selectedValues.year}
-                name="year"
-                onChange={(val) =>
-                  setSelectedValues((prev) => ({
-                    ...prev,
-                    year: val,
-                  }))
-                }
-              />
-            </div>
-
-            {/* File Upload */}
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Upload File</label>
-
-              {/* File Type Choice */}
-              <select
-                value={fileType}
-                onChange={(e) => {
-                  setFileType(e.target.value);
-                  setSelectedValues((prev) => ({ ...prev, files: [] }));
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className={styles.select}
-              >
-                <option value="pdf">PDF</option>
-                <option value="image">Images (PNG/JPG)</option>
-              </select>
+              <label className={styles.label}>Upload Papers</label>
 
               {selectedValues.files.length > 0 ? (
                 <>
-                  {fileType === "pdf" ? (
+                  {detectedType === "pdf" ? (
                     <div className={styles.fileInfo}>
                       <span className={styles.fileName}>
                         {selectedValues.files[0].name}
@@ -356,37 +381,23 @@ export default function UploadFormPYQ({ uploadFn }) {
                       </button>
                     </div>
                   ) : (
-                    <div className={styles.imageList}>
-                      <p className={styles.imageListHeader}>
-                        {selectedValues.files.length} images selected — drag to reorder
-                      </p>
-                      {selectedValues.files.map((file, index) => (
-                        <div
-                          key={file.name + index}
-                          className={`${styles.imageItem} ${dragIndex === index ? styles.dragging : ""}`}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, index)}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => handleDrop(e, index)}
-                        >
-                          <span className={styles.dragHandle}>☰</span>
-                          <img
-                            src={thumbnailUrls[index]}
-                            alt={file.name}
-                            className={styles.thumbnail}
-                          />
-                          <span className={styles.imageFileName}>
-                            {index + 1}. {file.name}
-                          </span>
-                        </div>
-                      ))}
+                    <div className={styles.fileSummary}>
+                      <span className={styles.fileSummaryText}>
+                        {selectedValues.files.length} image{selectedValues.files.length > 1 ? "s" : ""} selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowOverlay(true)}
+                        className={styles.editBtn}
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         onClick={handleRemoveFiles}
                         className={styles.removeBtn}
-                        style={{ marginTop: "8px", alignSelf: "flex-start" }}
                       >
-                        Remove All
+                        Clear
                       </button>
                     </div>
                   )}
@@ -397,8 +408,8 @@ export default function UploadFormPYQ({ uploadFn }) {
                   id="uploadFile"
                   className={styles.pdfFile}
                   name="uploadFile"
-                  accept={fileType === "pdf" ? ".pdf" : "image/png,image/jpeg"}
-                  multiple={fileType === "image"}
+                  accept=".pdf,image/png,image/jpeg"
+                  multiple
                   required
                   ref={fileInputRef}
                   onChange={handleFileChange}
@@ -406,26 +417,92 @@ export default function UploadFormPYQ({ uploadFn }) {
               )}
 
               {errorMessage && (
-                <p style={{ color: "red", marginTop: "5px" }}>{errorMessage}</p>
+                <p style={{ color: "#ff6b6b", marginTop: "5px", fontSize: "13px" }}>{errorMessage}</p>
               )}
             </div>
           </div>
 
-          {/* Submit & Reset */}
-          <div className={styles.buttonGroup}>
-            <button
-              type="submit"
-              className={styles.submitBtn}
-              disabled={upload}
-            >
-              {upload ? "Uploading..." : "Upload"}
-            </button>
-            <button type="reset" className={styles.resetBtn} disabled={upload}>
-              Reset
-            </button>
-          </div>
         </form>
       </div>
+      <div className={styles.buttonGroup}>
+        <button
+          type="submit"
+          form="pyqForm"
+          className={styles.submitBtn}
+          disabled={upload}
+        >
+          {upload ? "Uploading..." : "Submit"}
+        </button>
+        <button type="reset" form="pyqForm" className={styles.resetBtn} disabled={upload}>
+          Reset
+        </button>
+      </div>
+
+      {/* Image reorder overlay */}
+      {showOverlay && detectedType === "image" && selectedValues.files.length > 0 && (
+        <div className={styles.overlay} onClick={() => setShowOverlay(false)}>
+          <div className={styles.overlayContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.overlayHeader}>
+              <h2 className={styles.overlayTitle}>
+                {selectedValues.files.length} image{selectedValues.files.length > 1 ? "s" : ""} — drag to reorder
+              </h2>
+              <button
+                type="button"
+                className={styles.overlayClose}
+                onClick={() => setShowOverlay(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.overlayList}>
+              {selectedValues.files.map((file, index) => (
+                <div
+                  key={file.name + index}
+                  className={`${styles.imageItem} ${dragIndex === index ? styles.dragging : ""}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDrop(e, index)}
+                >
+                  <span className={styles.dragHandle}>☰</span>
+                  <img
+                    src={thumbnailUrls[index]}
+                    alt={file.name}
+                    className={styles.thumbnail}
+                  />
+                  <span className={styles.imageFileName}>
+                    {index + 1}. {file.name}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.removeOneBtn}
+                    onClick={() => handleRemoveOne(index)}
+                    title="Remove this image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className={styles.overlayFooter}>
+              <button
+                type="button"
+                onClick={handleRemoveFiles}
+                className={styles.removeBtn}
+              >
+                Remove All
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowOverlay(false)}
+                className={styles.overlayDoneBtn}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

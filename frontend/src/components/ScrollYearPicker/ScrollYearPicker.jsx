@@ -69,15 +69,27 @@ export default function ScrollYearPicker({ years, value, onChange, name }) {
       {/* Hidden input for FormData */}
       <input type="hidden" name={name} value={value || ""} />
 
-      {/* Trigger button — looks like a select */}
-      <button
-        type="button"
-        className={styles.trigger}
+      {/* Trigger — looks identical to other selects because it is a native select */}
+      <div
+        className={styles.triggerWrapper}
         onClick={() => setIsOpen((prev) => !prev)}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen((prev) => !prev);
+          }
+        }}
       >
-        <span>{value || "Select Year"}</span>
-        <span className={`${styles.arrow} ${isOpen ? styles.arrowUp : ""}`}>▾</span>
-      </button>
+        <select
+          className={styles.trigger}
+          value={value || ""}
+          onChange={() => {}}
+          tabIndex={-1}
+        >
+          <option value={value || ""}>{value || "Select Year"}</option>
+        </select>
+      </div>
 
       {/* Popup picker */}
       {isOpen && (

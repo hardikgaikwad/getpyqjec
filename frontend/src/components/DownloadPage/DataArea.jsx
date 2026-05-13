@@ -1,6 +1,7 @@
 import classes from "./DataArea.module.css";
 import { useState, useRef, useEffect } from "react";
 import ErrorPage from "../ErrorPage/Error";
+import pdfIcon from "../../assets/pdficon.svg";
 
 export default function DataArea({ url }) {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -55,47 +56,38 @@ export default function DataArea({ url }) {
   return (
     <>
       <div className={classes["main-container"]}>
-        <div className={classes.header}>
-          <h1>YOUR DOCUMENT</h1>
-          <p className={classes.subtitle}>Previous Year Question Paper</p>
-        </div>
-
-        <div className={classes["card-wrapper"]}>
-          <div className={classes.card}>
-            {/* Decorative glowing orbs */}
-            <div className={classes["glow-orb-1"]}></div>
-            <div className={classes["glow-orb-2"]}></div>
-
+        <div className={classes.card}>
+          <div className={classes["card-body"]}>
             {/* PDF Icon */}
             <div className={classes["icon-area"]}>
-              <div className={classes["pdf-icon-large"]}>
-                <div className={classes["pdf-fold"]}></div>
-                <span className={classes["pdf-label"]}>PDF</span>
-              </div>
+              <img
+                src={pdfIcon}
+                alt="PDF"
+                className={classes["pdf-icon-img"]}
+              />
             </div>
 
             {/* File Info */}
             <div className={classes["file-info"]}>
               <h2 className={classes["file-name"]}>{file.name}</h2>
               <div className={classes["file-meta"]}>
+                {/* Missing years warning badge */}
+                {file.missingYears && file.missingYears.length > 0 && (
+                  <span className={classes["meta-badge"]}>
+                    <span className={classes["warning-dot"]}></span>
+                    PYQ of {file.missingYears.join(", ")} not available.
+                  </span>
+                )}
                 <span className={classes["meta-badge"]}>
                   <span className={classes["meta-dot"]}></span>
-                  Ready to download
+                  Ready to download.
                 </span>
               </div>
-
-              {/* Missing years warning */}
-              {file.missingYears && file.missingYears.length > 0 && (
-                <div className={classes["missing-years"]}>
-                  <span className={classes["warning-icon"]}>⚠</span>
-                  <span>
-                    PYQs not available for: <strong>{file.missingYears.join(", ")}</strong>
-                  </span>
-                </div>
-              )}
             </div>
+          </div>
 
-            {/* Download Button */}
+          {/* Download Button */}
+          <div className={classes["download-area"]}>
             <button
               className={`${classes["download-btn"]} ${isDownloading ? classes["downloading"] : ""
                 } ${isComplete ? classes["complete"] : ""}`}
@@ -114,14 +106,10 @@ export default function DataArea({ url }) {
                 </span>
               ) : (
                 <span className={classes["btn-content"]}>
-                  <span className={classes["download-icon"]}>⬇</span>
-                  Download File
+                  Download
                 </span>
               )}
             </button>
-
-            {/* Pulse ring on hover */}
-            <div className={classes["pulse-ring"]}></div>
           </div>
         </div>
       </div>

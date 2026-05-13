@@ -76,8 +76,9 @@ export default function FormPYQ({ fetchFn }) {
 
   return (
     <div className={styles.downloadPage}>
+      <h1 className={styles.heading}>Find Previous Year Question Papers Instantly.</h1>
+      <p className={styles.subtitle}>Curated engineering resources, filters by semester, branch & subject.</p>
       <div className={styles.container}>
-        <h1 className={styles.heading}>GETPYQJEC</h1>
         <form
           id="pyqForm"
           onSubmit={handleSubmit}
@@ -164,9 +165,7 @@ export default function FormPYQ({ fetchFn }) {
                 )}
               </select>
             </div>
-          </div>
 
-          <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label htmlFor="subject" className={styles.label}>
                 Subject
@@ -185,18 +184,18 @@ export default function FormPYQ({ fetchFn }) {
                 required
               >
                 <option value="" disabled hidden>
-                  {selectedValues.branch && selectedValues.semester
-                    ? "Select the subject"
-                    : "Select branch and semester first"}
+                  Select the subject
                 </option>
                 {subjectsToShow.map((subject) => (
                   <option key={subject[0]} value={subject[1]}>
-                    {subject[0]}
+                    {subject[0]}  
                   </option>
                 ))}
               </select>
             </div>
+          </div>
 
+          <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label className={styles.label}>From Year</label>
               <ScrollYearPicker
@@ -212,10 +211,8 @@ export default function FormPYQ({ fetchFn }) {
                 }
               />
             </div>
-          </div>
 
-          <div className={styles.formRow}>
-            <div className={styles.formGroup} style={{ flex: "0 1 calc(50% - 7.5px)" }}>
+            <div className={styles.formGroup}>
               <label className={styles.label}>To Year</label>
               <ScrollYearPicker
                 years={toYearOptions}
@@ -229,21 +226,25 @@ export default function FormPYQ({ fetchFn }) {
                 }
               />
             </div>
+
+            {/* Empty spacer to align with the 3-column row above */}
+            <div className={styles.formGroup} style={{ visibility: "hidden" }}></div>
           </div>
 
-          <div className={styles.buttonGroup}>
-            <button
-              type="submit"
-              className={styles.submitBtn}
-              disabled={fetching}
-            >
-              {fetching ? "Sending Request..." : "Submit"}
-            </button>
-            <button type="reset" className={styles.resetBtn}>
-              Reset
-            </button>
-          </div>
-        </form>
+          </form>
+      </div>
+      <div className={styles.buttonGroup}>
+        <button
+          type="submit"
+          form="pyqForm"
+          className={styles.submitBtn}
+          disabled={fetching}
+        >
+          {fetching ? "Sending Request..." : "Submit"}
+        </button>
+        <button type="reset" form="pyqForm" className={styles.resetBtn}>
+          Reset
+        </button>
       </div>
     </div>
   );
