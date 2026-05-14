@@ -18,7 +18,6 @@ def get_pdfs(branch, semester, subject_code, from_year, to_year):
     
     pdfs = []
     found_years = set()
-    found_years.add(year)
     
     if subject_code and subject_code.lower() != "all":
         subject_dirs = [subject_code]

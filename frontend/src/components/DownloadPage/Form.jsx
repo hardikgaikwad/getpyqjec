@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import styles from "./Form.module.css";
 import {
   branches,
   subjects,
   semesters,
-  previousYears,
   ordinals,
 } from "../../information";
+import ScrollYearPicker from "../ScrollYearPicker/ScrollYearPicker";
 
 const initialState = {
   semester: "",
@@ -16,11 +16,19 @@ const initialState = {
   toYear: "",
 };
 
+// Generate current year + last 10 years (descending)
+const currentYear = new Date().getFullYear();
+const allYears = Array.from({ length: 11 }, (_, i) => currentYear - i);
+
 export default function FormPYQ({ fetchFn }) {
-  const [manualFromYear, setManualFromYear] = useState(false);
-  const [manualToYear, setManualToYear] = useState(false);
   const [selectedValues, setSelectedValues] = useState(initialState);
   const [fetching, setFetching] = useState(false);
+
+  // toYear options: only years >= fromYear
+  const toYearOptions = useMemo(() => {
+    if (!selectedValues.fromYear) return allYears;
+    return allYears.filter((y) => y >= Number(selectedValues.fromYear));
+  }, [selectedValues.fromYear]);
   const subjectsToShow = [];
 
   if (selectedValues.semester && selectedValues.branch) {
@@ -40,8 +48,6 @@ export default function FormPYQ({ fetchFn }) {
       const data = Object.fromEntries(fd.entries());
       const queryString = new URLSearchParams(data).toString();
       await fetchFn(queryString);
-      setManualFromYear(false);
-      setManualToYear(false);
       setSelectedValues({
         semester: "",
         branch: "",
@@ -64,16 +70,15 @@ export default function FormPYQ({ fetchFn }) {
   }
   function handleReset(e) {
     e.preventDefault();
-    setManualFromYear(false);
-    setManualToYear(false);
     setSelectedValues(initialState);
     e.target.reset();
   }
 
   return (
     <div className={styles.downloadPage}>
+      <h1 className={styles.heading}>Find Previous Year Question Papers Instantly.</h1>
+      <p className={styles.subtitle}>Curated engineering resources, filters by semester, branch & subject.</p>
       <div className={styles.container}>
-        <h1 className={styles.heading}>GETPYQJEC</h1>
         <form
           id="pyqForm"
           onSubmit={handleSubmit}
@@ -160,9 +165,7 @@ export default function FormPYQ({ fetchFn }) {
                 )}
               </select>
             </div>
-          </div>
 
-          <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label htmlFor="subject" className={styles.label}>
                 Subject
@@ -181,187 +184,67 @@ export default function FormPYQ({ fetchFn }) {
                 required
               >
                 <option value="" disabled hidden>
-                  {selectedValues.branch && selectedValues.semester
-                    ? "Select the subject"
-                    : "Select branch and semester first"}
+                  Select the subject
                 </option>
                 {subjectsToShow.map((subject) => (
                   <option key={subject[0]} value={subject[1]}>
-                    {subject[0]}
+                    {subject[0]}  
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <div className={styles.yearGroup}>
-                {manualFromYear ? (
-                  <>
-                    <label htmlFor="fromYearManual" className={styles.label}>
-                      From Year
-                    </label>
-                    <input
-                      type="text"
-                      id="fromYearManual"
-                      name="from_year"
-                      className={styles.manualYear}
-                      placeholder="Enter year (e.g., 2024)"
-                      pattern="[0-9]{4}"
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSelectedValues((prev) => ({
-                          ...prev,
-                          fromYear: value,
-                        }));
-                        if (value < previousYears[4] && value >= 1000)
-                          setManualToYear(true);
-                      }}
-                      autoFocus
-                    />
-                  </>
-                ) : (
-                  <>
-                    <label htmlFor="fromYear" className={styles.label}>
-                      From Year
-                    </label>
-                    <select
-                      id="fromYear"
-                      name="from_year"
-                      className={`${styles.yearSelect} ${styles.select}`}
-                      value={selectedValues.fromYear}
-                      onChange={(e) => {
-                        const selectedValue = e.target.value;
-                        if (selectedValue === "true") setManualFromYear(true);
-                        else
-                          setSelectedValues((prev) => ({
-                            ...prev,
-                            fromYear: selectedValue,
-                          }));
-                      }}
-                      required
-                    >
-                      <option value="" disabled hidden>
-                        Select Year
-                      </option>
-                      {previousYears.map((year) => {
-                        return (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        );
-                      })}
-                      <option value="true">Type Manually</option>
-                    </select>
-                  </>
-                )}
-              </div>
             </div>
           </div>
 
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
-              <div className={`${styles.yearGroup} ${styles.toYear}`}>
-                {selectedValues.fromYear ? (
-                  manualToYear ? (
-                    <>
-                      <label htmlFor="toYearManual" className={styles.label}>
-                        To Year
-                      </label>
-                      <input
-                        type="text"
-                        id="toYearManual"
-                        name="toYear"
-                        className={styles.manualYear}
-                        placeholder="Enter year (e.g., 2024)"
-                        pattern="[0-9]{4}"
-                        onChange={(e) =>
-                          setSelectedValues((prev) => ({
-                            ...prev,
-                            toYear: e.target.value,
-                          }))
-                        }
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <label htmlFor="toYear" className={styles.label}>
-                        To Year
-                      </label>
-                      <select
-                        id="toYear"
-                        name="to_year"
-                        className={`${styles.yearSelect} ${styles.select}`}
-                        value={selectedValues.toYear}
-                        onChange={(e) => {
-                          const selectValue = e.target.value;
-                          if (selectValue === "true") setManualToYear(true);
-                          else
-                            setSelectedValues((prev) => ({
-                              ...prev,
-                              toYear: e.target.value,
-                            }));
-                        }}
-                        required
-                      >
-                        <option value="" disabled hidden>
-                          Select Year
-                        </option>
-                        {previousYears.map((year) => {
-                          if (
-                            year >= selectedValues.fromYear &&
-                            selectedValues.fromYear >= previousYears[4]
-                          )
-                            return (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            );
-                        })}
-                        <option value="true">Type Manually</option>
-                      </select>
-                    </>
-                  )
-                ) : (
-                  <>
-                    <label htmlFor="toYear" className={styles.label}>
-                      To Year
-                    </label>
-                    <select
-                      id="toYear"
-                      name="to_year"
-                      className={styles.select}
-                      value={selectedValues.toYear}
-                      onChange={(e) =>
-                        setSelectedValues((prev) => ({
-                          ...prev,
-                          toYear: e.target.value,
-                        }))
-                      }
-                      required
-                    >
-                      <option value="" disabled hidden>
-                        First select "From Year"
-                      </option>
-                    </select>
-                  </>
-                )}
-              </div>
+              <label className={styles.label}>From Year</label>
+              <ScrollYearPicker
+                years={allYears}
+                value={selectedValues.fromYear}
+                name="from_year"
+                onChange={(val) =>
+                  setSelectedValues((prev) => ({
+                    ...prev,
+                    fromYear: val,
+                    toYear: prev.toYear && Number(prev.toYear) < Number(val) ? val : prev.toYear,
+                  }))
+                }
+              />
             </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>To Year</label>
+              <ScrollYearPicker
+                years={toYearOptions}
+                value={selectedValues.toYear}
+                name="to_year"
+                onChange={(val) =>
+                  setSelectedValues((prev) => ({
+                    ...prev,
+                    toYear: val,
+                  }))
+                }
+              />
+            </div>
+
+            {/* Empty spacer to align with the 3-column row above */}
+            <div className={styles.formGroup} style={{ visibility: "hidden" }}></div>
           </div>
 
-          <div className={styles.buttonGroup}>
-            <button
-              type="submit"
-              className={styles.submitBtn}
-              disabled={fetching}
-            >
-              {fetching ? "Sending Request..." : "Submit"}
-            </button>
-            <button type="reset" className={styles.resetBtn}>
-              Reset
-            </button>
-          </div>
-        </form>
+          </form>
+      </div>
+      <div className={styles.buttonGroup}>
+        <button
+          type="submit"
+          form="pyqForm"
+          className={styles.submitBtn}
+          disabled={fetching}
+        >
+          {fetching ? "Sending Request..." : "Submit"}
+        </button>
+        <button type="reset" form="pyqForm" className={styles.resetBtn}>
+          Reset
+        </button>
       </div>
     </div>
   );

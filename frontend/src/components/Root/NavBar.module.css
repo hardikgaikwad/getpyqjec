@@ -1,36 +1,32 @@
+@font-face {
+  font-family: 'Outfit Medium';
+  src: url('../../assets/Outfit/static/Outfit-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+
 .navbar {
-  background-color: black; /* A slightly lighter shade for the bar */
-  border-bottom: 1px solid #4a5568;
+  background-color: #0a0a0a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   height: 50px;
   padding: 0 2rem;
   display: flex;
   gap: 30px;
-  margin-bottom: 30px;
+  margin-bottom: 0;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.download-link{
+.download-link {
   text-decoration: none;
 }
 
-.navbar-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.navbar-logo {
-  color: #3b82f6; /* Blue color for the logo */
-  width: 24px;
-  height: 24px;
-}
-
 .navbar-title {
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1.125rem;
+  color: white;
+  font-family: 'Outfit Medium', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  letter-spacing: 1.5px;
 }
 
 .navbar-right {
@@ -40,14 +36,17 @@
 }
 
 .navbar-link {
-  color: #ffffff;
+  color: white;
+  font-family: 'Outfit Medium', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
   text-decoration: none;
-  font-size: 1rem;
+  letter-spacing: 0.5px;
   transition: color 0.2s ease-in-out;
 }
 
 .navbar-link:not(.active):hover {
-  color: #a0aec0; /* A light gray for hover effect */
+  color: #e2e8f0;
 }
 
 .profile-link {
@@ -65,20 +64,14 @@
 
 /* Active link style */
 .active {
-  background-color: rebeccapurple;
-  color: #ffffff;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
+  color: #d4c9b0;
+  text-shadow: 0 0 8px rgba(212, 201, 176, 0.4);
 }
 
 /* Responsive adjustments */
 @media (max-width: 520px) {
   .navbar {
-    padding: 1rem;
-  }
-
-  .navbar-left {
-    gap: 0.5rem;
+    padding: 0 1rem;
   }
 
   .navbar-right {
@@ -86,7 +79,7 @@
   }
 
   .navbar-title {
-    display: none;
+    font-size: 0.85rem;
   }
 }
 
@@ -95,10 +88,9 @@
 }
 
 .user-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
-  filter: invert(1); /* makes the black SVG white */
   transition: transform 0.2s ease;
 }
 
@@ -110,8 +102,8 @@
   position: absolute;
   top: 40px;
   right: 0;
-  background: linear-gradient(145deg, #1a1a1a, #2d2d2d);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1a1810;
+  border: 1px solid rgba(180, 160, 120, 0.15);
   border-radius: 10px;
   padding: 12px 16px;
   min-width: 150px;
@@ -123,24 +115,27 @@
 }
 
 .dropdown-name {
-  color: #e0e0e0;
-  font-size: 0.85rem;
+  color: white;
+  font-family: 'Outfit Medium', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(180, 160, 120, 0.15);
 }
 
 .dropdown-logout {
   background: none;
   border: none;
-  color: #f87171;
+  color: white;
+  font-family: 'Outfit Medium', sans-serif;
+  font-weight: 500;
+  font-size: 16px;
   cursor: pointer;
-  font-size: 0.9rem;
   text-align: left;
   padding: 4px 0;
-  font-family: inherit;
   transition: color 0.2s ease;
 }
 
 .dropdown-logout:hover {
-  color: #ef4444;
+  color: #e8a070;
 }

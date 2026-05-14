@@ -34,9 +34,16 @@ export default function LoginForm() {
 
   return (
     <div className={styles.loginPage}>
-      <div className={styles.container}>
-        <h1 className={styles.heading}>{isLogin ? "Login" : "Register"}</h1>
+      <h1 className={styles.pageHeading}>
+        {isLogin ? "Continue Your Preparation." : "Join The PYQ Community."}
+      </h1>
+      <p className={styles.subtitle}>
+        {isLogin 
+          ? "Log in to explore curated previous year question papers faster." 
+          : "Create an account to upload, access and organize question papers easily"}
+      </p>
 
+      <div className={styles.container}>
         <Form method="post" className={styles.form}>
           {!isLogin && (
             <div className={styles.formGroup}>
@@ -115,22 +122,24 @@ export default function LoginForm() {
               disabled={isSubmitting}
               className={styles.submitBtn}
             >
-              {isSubmitting ? "Submitting..." : "Submit"}
+              {isSubmitting ? "Submitting..." : (isLogin ? "Login" : "Register")}
             </button>
           </div>
-          <h3 className={styles.infoText}>
-            {isLogin
-              ? "Don't have an account? Please Register!"
-              : "If you already has an account, just sign in."}
-          </h3>
-          <NavLink
-            to={`?mode=${isLogin ? "register" : "login"}`}
-            onClick={(e) => isSubmitting && e.preventDefault()}
-            style={isSubmitting ? { pointerEvents: "none", opacity: 0.5 } : {}}
-            className={styles.switchLink}
-          >
-            {isLogin ? "Register" : "Login"}
-          </NavLink>
+          
+          <div className={styles.footerLink}>
+            <span className={styles.infoText}>
+              {isLogin ? "Don't have an Account?" : "Already have an account?"}
+            </span>
+            <br />
+            <NavLink
+              to={`?mode=${isLogin ? "register" : "login"}`}
+              onClick={(e) => isSubmitting && e.preventDefault()}
+              style={isSubmitting ? { pointerEvents: "none", opacity: 0.5 } : {}}
+              className={styles.switchLink}
+            >
+              {isLogin ? "Register" : "Login"}
+            </NavLink>
+          </div>
         </Form>
       </div>
     </div>

@@ -1,36 +1,57 @@
+@font-face {
+  font-family: 'Degular Medium';
+  src: url('../../assets/degular-font-family-1737058454-0/Degular-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Degular Regular';
+  src: url('../../assets/degular-font-family-1737058454-0/Degular-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
 .downloadPage {
-  min-height: 100vh;
-  background-color: #000000;
+  background: linear-gradient(180deg, #0a0a08 0%, #141410 50%, #0a0a08 100%);
   width: 100%;
   display: flex;
-  margin-bottom: 35px;
   flex-direction: column;
+  align-items: center;
+  padding-top: 50px;
+}
+
+.heading {
+  text-align: center;
+  margin-bottom: 10px;
+  font-family: 'Degular Medium', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 2.4em;
+  color: #EFEEE8;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #EFEEE8;
+  font-family: 'Degular Medium', sans-serif;
+  font-weight: 500;
+  font-size: 0.95em;
+  margin-bottom: 40px;
+  letter-spacing: 0.3px;
 }
 
 .container {
   margin-left: auto;
   margin-right: auto;
-  margin-top: 2%;
-  margin-bottom: 2%;
-  background: linear-gradient(145deg, #1a1a1a, #2d2d2d);
-  border-radius: 20px;
-  padding: 20px 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 100px rgba(99, 102, 241, 0.1);
-  max-width: 650px;
+  margin-bottom: 10px;
+  background: rgba(25, 25, 20, 0.6);
+  border-radius: 16px;
+  padding: 30px 35px;
+  max-width: 750px;
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.heading {
-  color: #ffffff;
-  text-align: center;
-  margin-bottom: 35px;
-  font-size: 2.5em;
-  letter-spacing: 3px;
-  background: linear-gradient(45deg, #6366f1, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+  border: 1px solid rgba(180, 160, 120, 0.15);
 }
 
 .form {
@@ -40,47 +61,49 @@
 .formRow {
   display: flex;
   gap: 15px;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
 }
 
 .formGroup {
   flex: 1;
-  margin-bottom: 25px;
-  justify-content: center;
+  margin-bottom: 0;
 }
 
 select option {
-  background-color: #1a1a1a;
-  color: #ffffff;
+  background-color: #141410;
+  color: #d4c9b0;
 }
 
 .label {
-  color: #e0e0e0;
+  color: #EFEEE8;
   display: block;
   margin-bottom: 8px;
+  font-family: 'Degular Regular', sans-serif;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0.5px;
 }
 
 .select,
 .manualYear {
   width: 100%;
-  padding: 12px 15px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  color: #ffffff;
-  font-size: 15px;
+  padding: 11px 14px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(180, 160, 120, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  font-family: 'Degular Regular', sans-serif;
+  font-weight: 300;
+  font-size: 14px;
   transition: all 0.3s ease;
   outline: none;
 }
 
 .select:focus,
 .manualYear:focus {
-  background-color: rgba(255, 255, 255, 0.08);
-  border-color: #6366f1;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(180, 160, 120, 0.4);
+  box-shadow: 0 0 12px rgba(180, 160, 120, 0.1);
 }
 
 .yearGroup {
@@ -103,43 +126,34 @@ select option {
 .buttonGroup {
   display: flex;
   gap: 15px;
-  margin-top: 35px;
+  justify-content: center;
+  max-width: 750px;
+  width: 100%;
+  margin-top: 20px;
+  padding-bottom: 40px;
 }
 
 .submitBtn,
 .resetBtn {
-  flex: 1;
+  flex: 0 1 220px;
   padding: 14px 30px;
   border: none;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 25px;
+  font-family: 'Degular Medium', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: white;
+  background: #FFFFFF80;
   cursor: pointer;
   transition: all 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
-.submitBtn {
-  background: linear-gradient(45deg, #6366f1, #8b5cf6);
-  color: white;
-  box-shadow: 0 5px 20px rgba(99, 102, 241, 0.3);
-}
-
-.submitBtn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
-}
-
-.resetBtn {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
+.submitBtn:hover,
 .resetBtn:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.6);
   transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.15);
 }
 
 /* Chrome, Safari, Edge, Opera */
@@ -156,36 +170,41 @@ select option {
 
 @media (max-width: 520px) {
   .downloadPage {
-    padding: 0 20px;
+    padding: 30px 20px 0;
   }
 
   .container {
-    margin: 20px auto;
-    padding: 30px 20px;
+    padding: 24px 18px;
   }
 
   .heading {
-    font-size: 2em;
-    letter-spacing: 2px;
+    font-size: 1.6em;
+  }
+
+  .subtitle {
+    font-size: 0.82em;
   }
 
   .formRow {
     flex-direction: column;
     gap: 0;
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
   }
 
   .formGroup {
-    margin-bottom: 15px !important;
-  }
-
-  .formRow:last-child .formGroup:last-child {
-    margin-bottom: 0;
+    margin-bottom: 15px;
   }
 
   .buttonGroup {
     flex-direction: column;
     gap: 10px;
+    align-items: center;
+  }
+
+  .submitBtn,
+  .resetBtn {
+    flex: none;
+    width: 100%;
   }
 
   .toYear {
@@ -195,11 +214,11 @@ select option {
 
 @media (max-width: 400px) {
   .downloadPage {
-    padding: 0 15px;
+    padding: 20px 15px 0;
   }
 
   .container {
-    padding: 25px 15px;
+    padding: 20px 14px;
   }
 
   .submitBtn,

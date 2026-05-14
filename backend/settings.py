@@ -154,7 +154,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ] + ([f"http://{_host_ip}:5173"] if _host_ip else [])
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ["Content-Disposition"]
+CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-missing_years"]
 
 ## Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
