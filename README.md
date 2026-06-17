@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="https://img.icons8.com/color/100/000000/graduation-cap.png" alt="GetPYQJEC Logo" width="100"/>
   <h1>🎓 GetPYQJEC</h1>
   <p><strong>A Next-Generation Academic Resource Platform</strong></p>
   <p>Providing seamless, systematic, and intuitive access to Previous Year Questions (PYQs) for college students.</p>
