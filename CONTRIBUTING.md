@@ -201,12 +201,14 @@ npm run build
    ```bash
    git push origin feat/your-feature-name
    ```
-2. Navigate to [hardikgaikwad/getpyqjec](https://github.com/hardikgaikwad/getpyqjec) on GitHub and click **"Compare & pull request"**.
-3. **PR Title**: Use conventional commit format (e.g., `feat: support dark mode toggle`).
-4. **Description**:
+2. Navigate to your forked repository on GitHub (`https://github.com/<your-username>/getpyqjec`).
+3. You will see a banner with **"Compare & pull request"** (or click the **"Contribute"** dropdown → **"Open pull request"**).
+4. Verify that the **base repository** is set to `hardikgaikwad/getpyqjec` (`main`) and the **head repository** is your fork and feature branch.
+5. **PR Title**: Use conventional commit format (e.g., `feat: support dark mode toggle`).
+6. **Description**:
    - What changed and why?
    - Any relevant issue numbers (`Fixes #12`).
    - Screenshots or recordings if UI changes were made.
-5. Ensure all test checks pass. Maintainers will review your PR and provide feedback!
+7. Ensure all test checks pass. Maintainers will review your PR and provide feedback!
 
 Thank you for helping make GetPYQ JEC better for all students! 🎓
