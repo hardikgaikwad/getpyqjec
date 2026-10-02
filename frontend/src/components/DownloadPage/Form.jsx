@@ -8,6 +8,7 @@ import {
 } from "../../information";
 import { fetchSubjects } from "../../http";
 import CustomSelect from "../CustomSelect/CustomSelect";
+import Mascot from "../Mascot/Mascot";
 
 const initialState = {
   semester: "",
@@ -134,138 +135,141 @@ export default function FormPYQ({ fetchFn }) {
     <div className={styles.downloadPage}>
       <h1 className={styles.heading}>Find Previous Year Question Papers Instantly.</h1>
       <p className={styles.subtitle}>Curated engineering resources, filters by semester, branch & subject.</p>
-      <div className={styles.container}>
-        <form
-          id="pyqForm"
-          onSubmit={handleSubmit}
-          onReset={handleReset}
-          className={styles.form}
-        >
-          {/* Row 1: Semester, Branch, Subject */}
-          <div className={styles.formRow}>
-            <div className={styles.formGroup}>
-              <label htmlFor="semester" className={styles.label}>
-                Semester
-              </label>
-              <CustomSelect
-                id="semester"
-                name="semester"
-                value={selectedValues.semester}
-                placeholder="Select Semester"
-                options={semesters.map((s) => ({ value: String(s), label: `Semester ${s}` }))}
-                required
-                onChange={(val) => {
-                  if (Number(val) > 2) {
+      <div className={styles.mascotPanelWrapper}>
+        <Mascot />
+        <div className={styles.container}>
+          <form
+            id="pyqForm"
+            onSubmit={handleSubmit}
+            onReset={handleReset}
+            className={styles.form}
+          >
+            {/* Row 1: Semester, Branch, Subject */}
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label htmlFor="semester" className={styles.label}>
+                  Semester
+                </label>
+                <CustomSelect
+                  id="semester"
+                  name="semester"
+                  value={selectedValues.semester}
+                  placeholder="Select Semester"
+                  options={semesters.map((s) => ({ value: String(s), label: `Semester ${s}` }))}
+                  required
+                  onChange={(val) => {
+                    if (Number(val) > 2) {
+                      setSelectedValues((prev) => ({
+                        ...prev,
+                        semester: val,
+                        branch: "",
+                        subject: "",
+                      }));
+                    } else {
+                      setSelectedValues((prev) => ({
+                        ...prev,
+                        semester: val,
+                        branch: "CommonForAllBranches",
+                        subject: "",
+                      }));
+                    }
+                  }}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="branch" className={styles.label}>
+                  Branch
+                </label>
+                <CustomSelect
+                  id="branch"
+                  name="branch"
+                  value={selectedValues.branch}
+                  placeholder="Select Branch"
+                  options={branchOptions}
+                  required
+                  disabled={!selectedValues.semester}
+                  onChange={(val) =>
                     setSelectedValues((prev) => ({
                       ...prev,
-                      semester: val,
-                      branch: "",
+                      branch: val,
                       subject: "",
-                    }));
-                  } else {
-                    setSelectedValues((prev) => ({
-                      ...prev,
-                      semester: val,
-                      branch: "CommonForAllBranches",
-                      subject: "",
-                    }));
+                    }))
                   }
-                }}
-              />
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="subject" className={styles.label}>
+                  Subject
+                </label>
+                <CustomSelect
+                  id="subject"
+                  name="subject_code"
+                  align="right"
+                  value={selectedValues.subject}
+                  placeholder={
+                    !selectedValues.branch
+                      ? "Select Branch First"
+                      : loadingSubjects
+                      ? "Loading subjects..."
+                      : "Select Subject"
+                  }
+                  options={subjectsToShow}
+                  required
+                  disabled={!selectedValues.branch || loadingSubjects}
+                  onChange={(val) =>
+                    setSelectedValues((prev) => ({
+                      ...prev,
+                      subject: val,
+                    }))
+                  }
+                />
+              </div>
             </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="branch" className={styles.label}>
-                Branch
-              </label>
-              <CustomSelect
-                id="branch"
-                name="branch"
-                value={selectedValues.branch}
-                placeholder="Select Branch"
-                options={branchOptions}
-                required
-                disabled={!selectedValues.semester}
-                onChange={(val) =>
-                  setSelectedValues((prev) => ({
-                    ...prev,
-                    branch: val,
-                    subject: "",
-                  }))
-                }
-              />
-            </div>
+            {/* Row 2: From Year, To Year */}
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>From Year</label>
+                <CustomSelect
+                  name="from_year"
+                  value={selectedValues.fromYear}
+                  placeholder="Select From Year"
+                  options={allYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  required
+                  onChange={(val) =>
+                    setSelectedValues((prev) => ({
+                      ...prev,
+                      fromYear: val,
+                      toYear: prev.toYear && Number(prev.toYear) < Number(val) ? val : prev.toYear,
+                    }))
+                  }
+                />
+              </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="subject" className={styles.label}>
-                Subject
-              </label>
-              <CustomSelect
-                id="subject"
-                name="subject_code"
-                align="right"
-                value={selectedValues.subject}
-                placeholder={
-                  !selectedValues.branch
-                    ? "Select Branch First"
-                    : loadingSubjects
-                    ? "Loading subjects..."
-                    : "Select Subject"
-                }
-                options={subjectsToShow}
-                required
-                disabled={!selectedValues.branch || loadingSubjects}
-                onChange={(val) =>
-                  setSelectedValues((prev) => ({
-                    ...prev,
-                    subject: val,
-                  }))
-                }
-              />
-            </div>
-          </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>To Year</label>
+                <CustomSelect
+                  name="to_year"
+                  value={selectedValues.toYear}
+                  placeholder="Select To Year"
+                  options={toYearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  required
+                  onChange={(val) =>
+                    setSelectedValues((prev) => ({
+                      ...prev,
+                      toYear: val,
+                    }))
+                  }
+                />
+              </div>
 
-          {/* Row 2: From Year, To Year */}
-          <div className={styles.formRow}>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>From Year</label>
-              <CustomSelect
-                name="from_year"
-                value={selectedValues.fromYear}
-                placeholder="Select From Year"
-                options={allYears.map((y) => ({ value: String(y), label: String(y) }))}
-                required
-                onChange={(val) =>
-                  setSelectedValues((prev) => ({
-                    ...prev,
-                    fromYear: val,
-                    toYear: prev.toYear && Number(prev.toYear) < Number(val) ? val : prev.toYear,
-                  }))
-                }
-              />
+              {/* Empty spacer to align with the 3-column row above */}
+              <div className={styles.formGroup} style={{ visibility: "hidden" }}></div>
             </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.label}>To Year</label>
-              <CustomSelect
-                name="to_year"
-                value={selectedValues.toYear}
-                placeholder="Select To Year"
-                options={toYearOptions.map((y) => ({ value: String(y), label: String(y) }))}
-                required
-                onChange={(val) =>
-                  setSelectedValues((prev) => ({
-                    ...prev,
-                    toYear: val,
-                  }))
-                }
-              />
-            </div>
-
-            {/* Empty spacer to align with the 3-column row above */}
-            <div className={styles.formGroup} style={{ visibility: "hidden" }}></div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
 
       <div className={styles.buttonGroup}>

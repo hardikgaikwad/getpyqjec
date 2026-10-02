@@ -14,16 +14,19 @@ export default function Footer() {
           <div className={classes.footerGrid}>
             {/* 1. Left Section: Brand & Community */}
             <div className={classes.brandSection}>
-              <Link to="/" onClick={handleScrollToTop} className={classes.logoLink} aria-label="GETPYQ JEC Home">
-                <div className={classes.logoGroup}>
+              <div className={classes.brandHeader}>
+                <Link to="/" onClick={handleScrollToTop} className={classes.logoLink} aria-label="GETPYQ JEC Home">
                   <img src={logoImg} alt="GETPYQ JEC Logo" className={classes.logoImage} />
-                  <span className={classes.logoTitle}>get(pyq jec)</span>
+                </Link>
+                <div className={classes.brandTextGroup}>
+                  <Link to="/" onClick={handleScrollToTop} className={classes.titleLink} aria-label="GETPYQ JEC Home">
+                    <span className={classes.logoTitle}>get(pyq jec)</span>
+                  </Link>
+                  <p className={classes.brandDescription}>
+                    Clean, student-curated question paper archives for Jabalpur Engineering College.
+                  </p>
                 </div>
-              </Link>
-
-              <p className={classes.brandDescription}>
-                Clean, student-curated question paper archives for Jabalpur Engineering College.
-              </p>
+              </div>
 
               <a
                 href="https://github.com/hardikgaikwad/getpyqjec"

@@ -1,8 +1,7 @@
-import classes from "./NavBar.module.css";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/AuthContext";
 import { useState, useRef, useEffect } from "react";
-import logoImg from "../../assets/logo.png";
+import classes from "./NavBar.module.css";
 
 export default function NavBar() {
   const { isLoggedIn, user, logout, isAdmin } = useAuth();
@@ -67,7 +66,6 @@ export default function NavBar() {
       <nav className={`${classes.navbar} ${isScrolled ? classes.scrolled : ""}`}>
       <NavLink to="/" className={classes["download-link"]}>
         <div className={classes["logo-group"]}>
-          <img src={logoImg} alt="GETPYQ JEC Logo" className={classes["logo-image"]} />
           <span className={classes["navbar-title"]}>get(pyq jec)</span>
         </div>
       </NavLink>

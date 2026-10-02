@@ -1,0 +1,205 @@
+.mascotRoot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Head Assembly (Book + Monkey Head) ── */
+.headAssembly {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% - 180px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+  /* Behind the filter panel (z-index 10) */
+  pointer-events: none;
+}
+
+/* ── Open Book (Flipped horizontally and sitting on skull) ── */
+.bookWrapper {
+  width: 300px;
+  position: relative;
+  z-index: 4;
+  margin-bottom: -120px;
+  /* Natural overlap on monkey skull */
+  display: flex;
+  justify-content: center;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6));
+}
+
+.bookImg {
+  width: 100%;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  transform: rotate(180deg);
+}
+
+/* ── Monkey Head (Significantly increased size) ── */
+.headWrapper {
+  position: relative;
+  width: 500px;
+  aspect-ratio: 1024 / 893;
+  z-index: 3;
+  /* Lower chin hidden behind panel top line; eyes & nostrils visible */
+  clip-path: inset(0 0 180px 0);
+  filter: drop-shadow(0 -6px 20px rgba(0, 0, 0, 0.45));
+}
+
+.headImg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* ── Eye & Pupil Tracking ── */
+.leftEyeRegion {
+  position: absolute;
+  left: 31.93%;
+  top: 43.06%;
+  width: 6.35%;
+  height: 10.08%;
+  pointer-events: none;
+}
+
+.rightEyeRegion {
+  position: absolute;
+  left: 63.62%;
+  top: 43.06%;
+  width: 6.45%;
+  height: 10.08%;
+  pointer-events: none;
+}
+
+.pupilImg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ── Hands (Completely opaque and above the form block) ── */
+.handWrapper {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  /* Placed ABOVE the form container (z-index 10) */
+  pointer-events: none;
+}
+
+.leftHand {
+  left: -40px;
+  bottom: 150px;
+}
+
+.rightHand {
+  right: -40px;
+  bottom: 150px;
+}
+
+.handImg {
+  width: 92px;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  opacity: 1;
+  /* Fully opaque */
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.45)) drop-shadow(0 6px 18px rgba(0, 0, 0, 0.85));
+}
+
+.mirroredHand {
+  transform: scaleX(-1);
+}
+
+/* ── Responsive Scaling ── */
+
+@media (max-width: 768px) {
+  .headAssembly {
+    bottom: calc(100% - 52px);
+  }
+
+  .headWrapper {
+    width: 250px;
+    clip-path: inset(0 0 52px 0);
+  }
+
+  .bookWrapper {
+    width: 220px;
+    margin-bottom: -13px;
+  }
+
+  .handImg {
+    width: 75px;
+  }
+
+  .leftHand {
+    left: -22px;
+  }
+
+  .rightHand {
+    right: -22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .headAssembly {
+    bottom: calc(100% - 40px);
+  }
+
+  .headWrapper {
+    width: 195px;
+    clip-path: inset(0 0 40px 0);
+  }
+
+  .bookWrapper {
+    width: 172px;
+    margin-bottom: -10px;
+  }
+
+  .handImg {
+    width: 56px;
+  }
+
+  .leftHand {
+    left: -14px;
+  }
+
+  .rightHand {
+    right: -14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .headAssembly {
+    bottom: calc(100% - 34px);
+  }
+
+  .headWrapper {
+    width: 165px;
+    clip-path: inset(0 0 34px 0);
+  }
+
+  .bookWrapper {
+    width: 145px;
+    margin-bottom: -9px;
+  }
+
+  .handImg {
+    width: 46px;
+  }
+
+  .leftHand {
+    left: -10px;
+  }
+
+  .rightHand {
+    right: -10px;
+  }
+}
