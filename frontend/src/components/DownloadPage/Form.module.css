@@ -48,12 +48,13 @@
 
 /* Mascot + panel layout wrapper */
 .mascotPanelWrapper {
+  --mascot-width: 500px;
   position: relative;
   max-width: 750px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
-  margin-top: 295px;
+  margin-top: calc(var(--mascot-width) * 0.5121 + 35px);
   margin-bottom: 10px;
 }
 
@@ -244,7 +245,7 @@ select option {
 
 @media (max-width: 768px) {
   .mascotPanelWrapper {
-    margin-top: 240px;
+    --mascot-width: 360px;
   }
 }
 
@@ -255,7 +256,8 @@ select option {
   }
 
   .mascotPanelWrapper {
-    margin-top: 190px;
+    --mascot-width: 280px;
+    margin-top: calc(var(--mascot-width) * 0.5121 + 28px);
   }
 
   .container {
@@ -304,7 +306,8 @@ select option {
   }
 
   .mascotPanelWrapper {
-    margin-top: 165px;
+    --mascot-width: 230px;
+    margin-top: calc(var(--mascot-width) * 0.5121 + 22px);
   }
 
   .container {

@@ -3,7 +3,6 @@ import styles from "./Mascot.module.css";
 import monkeyHead from "../../assets/mascot/monkey-head.png";
 import pupilLeft from "../../assets/mascot/pupil-left.png";
 import pupilRight from "../../assets/mascot/pupil-right.png";
-import bookImg from "../../assets/mascot/book.png";
 
 export default function Mascot() {
   const leftEyeRef = useRef(null);
@@ -159,18 +158,8 @@ export default function Mascot() {
 
   return (
     <div className={styles.mascotRoot} aria-hidden="true">
-      {/* ── Monkey Head & Book (Positioned behind top of filter panel) ── */}
+      {/* ── Monkey Head (Positioned behind top of filter panel) ── */}
       <div className={styles.headAssembly}>
-        {/* Open Book */}
-        <div className={styles.bookWrapper}>
-          <img
-            src={bookImg}
-            alt=""
-            className={styles.bookImg}
-            draggable="false"
-          />
-        </div>
-
         {/* Monkey Head with dynamic eyes */}
         <div className={styles.headWrapper}>
           <img
