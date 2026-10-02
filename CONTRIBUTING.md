@@ -210,5 +210,8 @@ npm run build
    - Any relevant issue numbers (`Fixes #12`).
    - Screenshots or recordings if UI changes were made.
 7. Ensure all test checks pass. Maintainers will review your PR and provide feedback!
+> [!NOTE]
+> *Seeing ❌ Vercel — Authorization required to deploy on your PR?*
+> Don't worry! This is completely normal for external contributors. Vercel simply pauses the live preview build until a team maintainer authorizes it. As long as GitHub shows ✅ No conflicts with base branch, your PR is ready for review!
 
 Thank you for helping make GetPYQ JEC better for all students! 🎓
