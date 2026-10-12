@@ -267,6 +267,40 @@ class UploadTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("Only PDF files are allowed", res.data["error"])
 
+    def test_get_existing_pyqs_missing_params(self):
+        res = self.client.get("/upload/")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("error", res.data)
+
+    def test_get_existing_pyqs_success(self):
+        PYQ.objects.create(
+            branch="IT",
+            semester=5,
+            subject_code="IT51",
+            year=2022,
+            exam_session="April",
+            r2_object_key="pyqs/IT/dummy1.pdf",
+            uploaded_by=self.user,
+        )
+        res = self.client.get("/upload/?branch=IT&semester=5&subject_code=IT51")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["uploaded"], [{"year": 2022, "session": "April", "exam_session": "April"}])
+
+    def test_get_existing_pyqs_common_branch(self):
+        PYQ.objects.create(
+            branch="COMMONFORALLBRANCHES",
+            semester=1,
+            subject_code="BT11",
+            year=2023,
+            exam_session="December",
+            r2_object_key="pyqs/COMMONFORALLBRANCHES/dummy2.pdf",
+            uploaded_by=self.user,
+        )
+        # Queried with CommonForAllBranches
+        res = self.client.get("/upload/?branch=CommonForAllBranches&semester=1&subject_code=BT11")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["uploaded"], [{"year": 2023, "session": "December", "exam_session": "December"}])
+
 
 class DownloadTests(TestCase):
     def setUp(self):

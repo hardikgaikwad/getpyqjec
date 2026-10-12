@@ -376,7 +376,71 @@ class LogoutView(APIView):
 # ─── PYQ Upload (R2) ─────────────────────────────────────────────────────────
 
 class UploadPYQView(APIView):
-    permission_classes = [IsAuthenticated, IsVerifiedStudent]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated(), IsVerifiedStudent()]
+
+    def get(self, request):
+        branch = request.GET.get("branch")
+        semester = request.GET.get("semester")
+        subject_code = request.GET.get("subject_code")
+
+        if not all([branch, semester, subject_code]):
+            return Response(
+                {"error": "Missing branch, semester, or subject_code query parameter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            semester = int(semester)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Invalid semester."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        branch_clean = branch.strip()
+        subject_code_clean = subject_code.strip().upper()
+
+        is_common_sem = (semester <= 2) or (branch_clean.upper() in ("COMMONFORALLBRANCHES", "COMMON FOR ALL BRANCHES"))
+        if is_common_sem:
+            query_filter = {
+                "branch__in": ["CommonForAllBranches", "COMMONFORALLBRANCHES"],
+                "semester__in": [1, 2],
+                "subject_code": subject_code_clean,
+            }
+        else:
+            branch_aliases = [branch_clean]
+            if branch_clean.upper() == "CS":
+                branch_aliases.append("CSE")
+            elif branch_clean.upper() == "CSE":
+                branch_aliases.append("CS")
+
+            query_filter = {
+                "branch__in": branch_aliases,
+                "semester": semester,
+                "subject_code": subject_code_clean,
+            }
+
+        pyqs = (
+            PYQ.objects.filter(**query_filter)
+            .exclude(r2_object_key="")
+            .filter(r2_object_key__isnull=False)
+            .values("year", "exam_session")
+            .distinct()
+        )
+
+        uploaded = [
+            {
+                "year": p["year"],
+                "session": p["exam_session"].strip().capitalize(),
+                "exam_session": p["exam_session"].strip().capitalize(),
+            }
+            for p in pyqs
+        ]
+
+        return Response({"uploaded": uploaded}, status=status.HTTP_200_OK)
 
     def post(self, request):
         branch = request.POST.get("branch")
@@ -429,8 +493,13 @@ class UploadPYQView(APIView):
                 "exam_session": exam_session,
             }
         else:
+            branch_aliases = [branch]
+            if branch == "CS":
+                branch_aliases.append("CSE")
+            elif branch == "CSE":
+                branch_aliases.append("CS")
             duplicate_filter = {
-                "branch": branch,
+                "branch__in": branch_aliases,
                 "semester": semester,
                 "subject_code": subject_code,
                 "year": year,

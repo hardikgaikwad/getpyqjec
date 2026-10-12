@@ -102,6 +102,20 @@ const uploadData = async (data) => {
   return await res.json();
 };
 
+const fetchExistingPYQs = async (branch, semester, subjectCode) => {
+  const params = new URLSearchParams({
+    branch,
+    semester: String(semester),
+    subject_code: subjectCode,
+  });
+  const res = await fetch(`${API_BASE}/upload/?${params.toString()}`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to fetch existing PYQs");
+  }
+  return await res.json();
+};
+
 const getVerificationStatus = async () => {
   const res = await authFetch(`${API_BASE}/verification/status/`);
   if (!res.ok) {
@@ -309,6 +323,7 @@ const rejectSubjectRequest = async (id, reason) => {
 export {
   fetchUrls,
   uploadData,
+  fetchExistingPYQs,
   fetchSubjects,
   requestSubjectAddition,
   getAdminSubjectRequests,

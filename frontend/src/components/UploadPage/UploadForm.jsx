@@ -8,7 +8,7 @@ import {
 } from "../../information";
 import createPdfFromImages from "../../imgTopdf";
 import CustomSelect from "../CustomSelect/CustomSelect";
-import { fetchSubjects, requestSubjectAddition } from "../../http";
+import { fetchSubjects, requestSubjectAddition, fetchExistingPYQs } from "../../http";
 import { useAuth } from "../../store/AuthContext";
 import ErrorPage from "../ErrorPage/Error";
 
@@ -35,6 +35,8 @@ export default function UploadFormPYQ({ uploadFn }) {
   const [selectedValues, setSelectedValues] = useState(initialState);
   const [dynamicSubjects, setDynamicSubjects] = useState({ current: [], past: [] });
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [existingPYQs, setExistingPYQs] = useState([]);
+  const [loadingExistingPYQs, setLoadingExistingPYQs] = useState(false);
   const [customSubjectCode, setCustomSubjectCode] = useState("");
   const [customSubjectName, setCustomSubjectName] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -203,6 +205,83 @@ export default function UploadFormPYQ({ uploadFn }) {
     return options;
   }, [selectedValues.semester, selectedValues.branch, dynamicSubjects]);
 
+  // Fetch already uploaded PYQs for the selected subject to filter out filled years & sessions
+  useEffect(() => {
+    if (
+      !selectedValues.branch ||
+      !selectedValues.semester ||
+      !selectedValues.subject ||
+      selectedValues.subject === "__UNLISTED__"
+    ) {
+      setExistingPYQs([]);
+      setLoadingExistingPYQs(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingExistingPYQs(true);
+
+    fetchExistingPYQs(selectedValues.branch, selectedValues.semester, selectedValues.subject)
+      .then((data) => {
+        if (isMounted) {
+          setExistingPYQs(data.uploaded || []);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch existing PYQs for subject", err);
+        if (isMounted) setExistingPYQs([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingExistingPYQs(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedValues.branch, selectedValues.semester, selectedValues.subject]);
+
+  // Compute available years (exclude years where BOTH April and December are already uploaded)
+  const availableYears = useMemo(() => {
+    if (!selectedValues.subject || selectedValues.subject === "__UNLISTED__") {
+      return allYears;
+    }
+    return allYears.filter((y) => {
+      const uploadedSessions = existingPYQs
+        .filter((p) => Number(p.year) === Number(y))
+        .map((p) => (p.session || p.exam_session || "").toLowerCase());
+      const hasApril = uploadedSessions.includes("april");
+      const hasDecember = uploadedSessions.includes("december");
+      return !(hasApril && hasDecember);
+    });
+  }, [selectedValues.subject, existingPYQs]);
+
+  // Compute available sessions for the selected year (exclude sessions already uploaded)
+  const availableSessions = useMemo(() => {
+    if (!selectedValues.year) return ALL_SESSIONS;
+
+    const uploadedSessions = existingPYQs
+      .filter((p) => Number(p.year) === Number(selectedValues.year))
+      .map((p) => (p.session || p.exam_session || "").toLowerCase());
+
+    return ALL_SESSIONS.filter(
+      (s) => !uploadedSessions.includes(s.value.toLowerCase())
+    );
+  }, [selectedValues.year, existingPYQs]);
+
+  // Reset year if selected year is no longer available
+  useEffect(() => {
+    if (selectedValues.year && !availableYears.some((y) => String(y) === String(selectedValues.year))) {
+      setSelectedValues((prev) => ({ ...prev, year: "", session: "" }));
+    }
+  }, [availableYears, selectedValues.year]);
+
+  // Reset session if selected session is no longer available
+  useEffect(() => {
+    if (selectedValues.session && !availableSessions.some((s) => s.value === selectedValues.session)) {
+      setSelectedValues((prev) => ({ ...prev, session: "" }));
+    }
+  }, [availableSessions, selectedValues.session]);
+
   // Handle file selection — auto-detect type
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
@@ -370,6 +449,14 @@ export default function UploadFormPYQ({ uploadFn }) {
       formData.append("file", finalFile);
 
       await uploadFn(formData);
+      setExistingPYQs((prev) => [
+        ...prev,
+        {
+          year: Number(selectedValues.year),
+          session: selectedValues.session,
+          exam_session: selectedValues.session,
+        },
+      ]);
       setSelectedValues(initialState);
       setCustomSubjectCode("");
       setCustomSubjectName("");
@@ -395,6 +482,7 @@ export default function UploadFormPYQ({ uploadFn }) {
   function handleReset(e) {
     e.preventDefault();
     setSelectedValues(initialState);
+    setExistingPYQs([]);
     setCustomSubjectCode("");
     setCustomSubjectName("");
     setErrorMessage("");
@@ -580,10 +668,18 @@ export default function UploadFormPYQ({ uploadFn }) {
                 id="year"
                 name="year"
                 value={selectedValues.year}
-                placeholder="Select Year"
-                options={allYears.map((y) => ({ value: String(y), label: String(y) }))}
+                placeholder={
+                  !selectedValues.subject
+                    ? "Select Subject First"
+                    : loadingExistingPYQs
+                    ? "Checking existing PYQs..."
+                    : availableYears.length === 0
+                    ? "All Years Uploaded"
+                    : "Select Year"
+                }
+                options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
                 required
-                disabled={!selectedValues.subject}
+                disabled={!selectedValues.subject || loadingExistingPYQs || availableYears.length === 0}
                 onChange={(val) =>
                   setSelectedValues((prev) => ({
                     ...prev,
@@ -601,10 +697,16 @@ export default function UploadFormPYQ({ uploadFn }) {
                 id="session"
                 name="session"
                 value={selectedValues.session}
-                placeholder="Select Session"
-                options={ALL_SESSIONS}
+                placeholder={
+                  !selectedValues.year
+                    ? "Select Year First"
+                    : availableSessions.length === 0
+                    ? "All Sessions Uploaded"
+                    : "Select Session"
+                }
+                options={availableSessions}
                 required
-                disabled={!selectedValues.year}
+                disabled={!selectedValues.year || availableSessions.length === 0}
                 onChange={(val) => {
                   setSelectedValues((prev) => ({
                     ...prev,
@@ -683,6 +785,21 @@ export default function UploadFormPYQ({ uploadFn }) {
             </div>
           </div>
 
+          {selectedValues.subject && selectedValues.subject !== "__UNLISTED__" && !loadingExistingPYQs && availableYears.length === 0 && (
+            <div className={styles.unlistedInfoBanner} style={{ marginTop: "16px", borderColor: "rgba(34, 197, 94, 0.4)" }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <div>
+                <h4 className={styles.unlistedInfoTitle} style={{ color: "#22c55e" }}>All Question Papers Uploaded</h4>
+                <p className={styles.unlistedInfoText}>
+                  All available exam sessions (April &amp; December) for this subject across the last 10 years are already in the database. Thank you for helping keep GetPYQ complete!
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Note on lower side of box */}
           <div className={styles.dbNote}>
             <span className={styles.dbNoteIcon}>
@@ -714,7 +831,7 @@ export default function UploadFormPYQ({ uploadFn }) {
           type="submit"
           form="pyqForm"
           className={styles.submitBtn}
-          disabled={isBusy}
+          disabled={isBusy || (!isUnlistedSubject && !!selectedValues.subject && availableYears.length === 0)}
         >
           {modalState?.type === "requesting"
             ? "Submitting Request..."
