@@ -123,7 +123,7 @@ class PYQ(models.Model):
     subject = models.ForeignKey(
         Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name='pyqs'
     )
-    branch = models.CharField(max_length=10)
+    branch = models.CharField(max_length=30)
     semester = models.IntegerField()
     subject_code = models.CharField(max_length=20)
     year = models.IntegerField()
