@@ -1,8 +1,23 @@
 {
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "getpyqjec.vercel.app"
+        }
+      ],
+      "destination": "https://www.getpyqjec.in/:path*",
+      "permanent": true
     }
   ],
   "headers": [
