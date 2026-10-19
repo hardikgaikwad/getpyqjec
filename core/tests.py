@@ -1433,3 +1433,88 @@ class SecurityConfigTests(TestCase):
                 self.settings(DEBUG=False, FORCE_LOCAL_STORAGE=False):
             with self.assertRaises(R2StorageError):
                 r2.get_pyq_storage()
+
+
+class DownloadLinksTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201IT231046", email="links@gmail.com", name="Uploader", password="password123",
+        )
+        for year, session in ((2022, "December"), (2024, "April")):
+            PYQ.objects.create(
+                branch="IT", semester=5, subject_code="IT51", year=year, exam_session=session,
+                r2_object_key=f"pyqs/IT/{year}.pdf", uploaded_by=self.user,
+            )
+
+    def _mock_storage(self, mock_get_storage):
+        storage = MagicMock()
+        storage.generate_presigned_download_url.side_effect = lambda key, expiry=None: f"https://r2.test/{key}"
+        mock_get_storage.return_value = storage
+        return storage
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_single_subject(self, mock_get_storage):
+        storage = self._mock_storage(mock_get_storage)
+        res = self.client.get("/download/links/?branch=IT&semester=5&subject_code=IT51&from_year=2022&to_year=2024")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["filename"], "IT_sem5_IT51_2022-2024.pdf")
+        self.assertEqual([p["year"] for p in data["papers"]], [2022, 2024])
+        self.assertEqual(data["papers"][0]["url"], "https://r2.test/pyqs/IT/2022.pdf")
+        self.assertEqual(data["missing_years"], [2023])
+        self.assertEqual(data["missing_details"], {})
+        # Listing must never pull file bytes through the server.
+        storage.download_object.assert_not_called()
+        self.assertIn("private", res["Cache-Control"])
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_all_subjects_missing_details(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        res = self.client.get("/download/links/?branch=IT&semester=5&subject_code=all&from_year=2022&to_year=2023")
+        data = res.json()
+        self.assertTrue(data["is_all_subjects"])
+        self.assertNotIn("IT51", [s["code"] for s in data["missing_details"]["2022"]])
+        self.assertEqual(len(data["missing_details"]["2023"]), 5)
+        self.assertTrue(data["papers"][0]["subject_name"])
+
+    def test_links_none_found(self):
+        res = self.client.get("/download/links/?branch=CSE&semester=3&subject_code=CS31&from_year=2020&to_year=2021")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.json()["missing_years"], [2020, 2021])
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_cs_alias_finds_cse_papers(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        PYQ.objects.create(
+            branch="CSE", semester=4, subject_code="CS42", year=2023, exam_session="April",
+            r2_object_key="pyqs/CSE/a.pdf", uploaded_by=self.user,
+        )
+        res = self.client.get("/download/links/?branch=CS&semester=4&subject_code=CS42&from_year=2023&to_year=2023")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()["papers"]), 1)
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_query_count(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        # 1 query for the papers + 1 for subject display names; no R2 round trips.
+        with self.assertNumQueries(2):
+            self.client.get("/download/links/?branch=IT&semester=5&subject_code=IT51&from_year=2022&to_year=2024")
+
+    def test_links_missing_params(self):
+        res = self.client.get("/download/links/?branch=IT")
+        self.assertEqual(res.status_code, 400)
+
+
+class SubjectListQueryTests(TestCase):
+    def test_subjects_query_count_and_extra_codes(self):
+        user = User.objects.create_user(rno="0201IT231047", email="q@gmail.com", name="Q", password="password123")
+        PYQ.objects.create(
+            branch="IT", semester=5, subject_code="ZZ99", year=2023, exam_session="April",
+            r2_object_key="k", uploaded_by=user,
+        )
+        with self.assertNumQueries(3):
+            res = self.client.get("/subjects/?branch=IT&semester=5")
+        past_codes = [s["code"] for s in res.json()["past_subjects"]]
+        self.assertIn("ZZ99", past_codes)
+        self.assertIn("max-age=60", res["Cache-Control"])
