@@ -20,18 +20,21 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 58px);
-  padding: 40px 20px 60px;
+  /* One screen below the sticky navbar; svh excludes mobile browser toolbars. */
+  min-height: calc(100vh - 56px);
+  min-height: calc(100svh - 56px);
+  padding: clamp(8px, 2.5vh, 40px) 20px clamp(12px, 2.5vh, 40px);
   box-sizing: border-box;
 }
 
 .heading {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: clamp(4px, 1vh, 10px);
   font-family: 'Degular Medium', sans-serif;
   font-style: normal;
   font-weight: 500;
-  font-size: 2.4em;
+  font-size: clamp(1.9rem, 5.2vh, 2.4rem);
+  line-height: 1.15;
   color: #EFEEE8;
   letter-spacing: 0.5px;
 }
@@ -43,14 +46,14 @@
   font-style: normal;
   font-weight: 500;
   font-size: 0.95em;
-  margin-bottom: 40px;
+  margin-bottom: clamp(8px, 3vh, 40px);
   letter-spacing: 0.3px;
 }
 
 .container {
   margin-left: auto;
   margin-right: auto;
-  margin-bottom: 10px;
+  margin-bottom: 0;
   max-width: 750px;
   width: 100%;
   background: linear-gradient(
@@ -62,7 +65,7 @@
   backdrop-filter: blur(1.5px) saturate(130%);
   -webkit-backdrop-filter: blur(1.5px) saturate(130%);
   border-radius: 24px;
-  padding: 34px 40px;
+  padding: clamp(16px, 3vh, 34px) 40px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-top: 1px solid rgba(255, 255, 255, 0.38);
   border-left: 1px solid rgba(255, 255, 255, 0.22);
@@ -84,7 +87,7 @@
 .formRow {
   display: flex;
   gap: 15px;
-  margin-bottom: 20px;
+  margin-bottom: clamp(10px, 2vh, 20px);
   position: relative;
 }
 
@@ -94,6 +97,15 @@
 
 .formRow:last-of-type {
   z-index: 15;
+}
+
+/* An open dropdown must paint above the other form rows and the footer. */
+.container:has([aria-expanded="true"]) {
+  z-index: 30;
+}
+
+.formRow:has([aria-expanded="true"]) {
+  z-index: 30;
 }
 
 .formGroup {
@@ -108,7 +120,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: clamp(6px, 1.6vh, 16px);
   padding-top: 0;
   font-family: 'Degular Regular', sans-serif;
   font-size: 0.88rem;
@@ -136,7 +148,7 @@ select option {
 .label {
   color: #EFEEE8;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: clamp(4px, 0.9vh, 8px);
   font-family: 'Degular Regular', sans-serif;
   font-size: 14px;
   font-weight: 500;
@@ -214,8 +226,7 @@ select option {
   align-items: center;
   max-width: 750px;
   width: 100%;
-  margin-top: 20px;
-  padding-bottom: 40px;
+  margin-top: clamp(10px, 2vh, 20px);
   position: relative;
   z-index: 1;
 }
@@ -821,59 +832,112 @@ select option {
   appearance: textfield;
 }
 
-@media (max-width: 520px) {
+/* Short screens (e.g. 1366x768 / 1280x720 laptops, small phones): tighten the
+   form so the heading, form and buttons fit without scrolling. */
+@media (max-height: 700px) {
   .uploadPage {
-    padding: 30px 20px 0;
+    padding-top: 6px;
+  }
+
+  .heading {
+    font-size: clamp(1.6rem, 4.8vh, 2rem);
   }
 
   .container {
-    padding: 24px 18px;
+    --select-pad-y: 9px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .label {
+    margin-bottom: 4px;
+  }
+
+  .formRow {
+    margin-bottom: 10px;
+  }
+
+  .customFileInputBtn {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .submitBtn,
+  .resetBtn {
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+}
+
+/* Very short screens: drop the one-line subtitle; the main heading always stays. */
+@media (max-height: 610px) {
+  .subtitle {
+    display: none;
+  }
+
+  .heading {
+    margin-bottom: 6px;
+  }
+}
+
+@media (max-width: 520px) {
+  .uploadPage {
+    /* Mobile navbar is 50px tall */
+    min-height: calc(100vh - 50px);
+    min-height: calc(100svh - 50px);
+    padding: clamp(6px, 1.5vh, 30px) 15px clamp(10px, 2vh, 30px);
+  }
+
+  .container {
+    padding: clamp(12px, 2.2vh, 24px) 16px;
     border-radius: 20px;
   }
 
   .heading {
-    font-size: 1.6em;
+    font-size: clamp(1.35rem, 4.2vh, 1.6rem);
   }
 
   .subtitle {
     font-size: 0.82em;
   }
 
+  /* Two columns: Semester | Branch, Subject full width; Year | Session, Upload full width */
   .formRow {
-    flex-direction: column;
-    gap: 0;
-    margin-bottom: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(8px, 1.5vh, 15px) 10px;
+    margin-bottom: clamp(8px, 1.5vh, 15px);
   }
 
-  .formGroup {
-    margin-bottom: 15px;
+  .formRow > .formGroup:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  /* Subject code and name need the full width for their placeholders. */
+  .unlistedRequestContainer .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .dbNote {
+    font-size: 0.8rem;
   }
 
   .buttonGroup {
-    flex-direction: column;
     gap: 10px;
-    align-items: center;
   }
 
   .submitBtn,
   .resetBtn {
-    flex: none;
-    width: 100%;
+    /* Grow from content width so "Submit Subject Request" never overflows. */
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 12px 16px;
   }
 }
 
 @media (max-width: 400px) {
-  .uploadPage {
-    padding: 20px 15px 0;
-  }
-
-  .container {
-    padding: 20px 14px;
-  }
-
   .submitBtn,
   .resetBtn {
-    padding: 12px 20px;
     font-size: 14px;
   }
 }

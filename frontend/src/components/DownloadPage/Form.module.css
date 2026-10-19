@@ -111,6 +111,15 @@
   z-index: 15;
 }
 
+/* An open dropdown must paint above the other form rows and the footer. */
+.container:has([aria-expanded="true"]) {
+  z-index: 30;
+}
+
+.formRow:has([aria-expanded="true"]) {
+  z-index: 30;
+}
+
 .formGroup {
   flex: 1;
   min-width: 0;

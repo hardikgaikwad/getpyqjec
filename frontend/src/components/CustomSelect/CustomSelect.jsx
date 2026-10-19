@@ -1,5 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import styles from "./CustomSelect.module.css";
+
+const LIST_MAX_HEIGHT = 280;
+const LIST_MIN_HEIGHT = 120;
+// Below this much room, flip upwards if there is more space above.
+const LIST_COMFORT_HEIGHT = 200;
+// Gap to the trigger + dropdown padding/border + a small margin from the screen edge.
+const DROPDOWN_CHROME = 30;
 
 export default function CustomSelect({
   options = [],
@@ -18,8 +25,24 @@ export default function CustomSelect({
 
   const [isOpen, setIsOpen] = useState(false);
   const [computedAlign, setComputedAlign] = useState(align === "right" ? "right" : "left");
+  const [placement, setPlacement] = useState({ up: false, maxHeight: LIST_MAX_HEIGHT });
   const wrapperRef = useRef(null);
   const listRef = useRef(null);
+
+  // Open upwards when there isn't room below (e.g. fields near the bottom of a
+  // one-screen layout), and never let the list run past the viewport edge.
+  useLayoutEffect(() => {
+    if (!isOpen || !wrapperRef.current) return;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - DROPDOWN_CHROME;
+    // The sticky navbar would cover a list opened upwards past it.
+    const navBottom = Math.max(0, document.querySelector("nav")?.getBoundingClientRect().bottom ?? 0);
+    const spaceAbove = rect.top - navBottom - DROPDOWN_CHROME;
+    const needed = Math.min(LIST_COMFORT_HEIGHT, listRef.current?.scrollHeight ?? LIST_COMFORT_HEIGHT);
+    const up = spaceBelow < needed && spaceAbove > spaceBelow;
+    const room = up ? spaceAbove : spaceBelow;
+    setPlacement({ up, maxHeight: Math.max(LIST_MIN_HEIGHT, Math.min(LIST_MAX_HEIGHT, room)) });
+  }, [isOpen]);
 
   // Compute dropdown alignment based on prop or viewport position
   useEffect(() => {
@@ -185,10 +208,15 @@ export default function CustomSelect({
         <div
           className={`${styles.dropdown} ${
             computedAlign === "right" ? styles.alignRight : styles.alignLeft
-          } ${dropdownClassName}`}
+          } ${placement.up ? styles.openUp : ""} ${dropdownClassName}`}
         >
 
-          <div ref={listRef} className={styles.list} role="listbox">
+          <div
+            ref={listRef}
+            className={styles.list}
+            style={{ maxHeight: placement.maxHeight }}
+            role="listbox"
+          >
             {normalizedOptions.length === 0 ? (
               <div className={styles.emptyItem}>No options available</div>
             ) : (

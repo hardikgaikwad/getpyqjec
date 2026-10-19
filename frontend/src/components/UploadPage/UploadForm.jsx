@@ -509,6 +509,7 @@ export default function UploadFormPYQ({ uploadFn }) {
               <CustomSelect
                 id="branch"
                 name="branch"
+                align="right"
                 value={selectedValues.branch}
                 placeholder="Select Branch"
                 options={
@@ -659,6 +660,7 @@ export default function UploadFormPYQ({ uploadFn }) {
               <CustomSelect
                 id="session"
                 name="session"
+                align="right"
                 value={selectedValues.session}
                 placeholder={
                   !selectedValues.year
