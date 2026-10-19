@@ -1,5 +1,24 @@
 import { API_BASE } from "./config";
 
+// Refresh tokens rotate on every use, so concurrent 401s must share a single
+// refresh call; a second call with the same (now revoked) token would fail.
+let refreshInFlight = null;
+
+function refreshAccessToken() {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE}/auth/refresh/`, {
+      method: "POST",
+      credentials: "include",
+    })
+      // Network errors propagate (as before) instead of logging the user out.
+      .then(async (res) => (res.ok ? (await res.json()).access : null))
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 /**
  * Helper to make authenticated requests with automatic token refresh on 401.
  */
@@ -20,15 +39,11 @@ async function authFetch(url, options = {}) {
   let res = await fetch(url, reqOptions);
 
   if (res.status === 401) {
-    const refreshRes = await fetch(`${API_BASE}/auth/refresh/`, {
-      method: "POST",
-      credentials: "include",
-    });
+    const newToken = await refreshAccessToken();
 
-    if (refreshRes.ok) {
-      const refreshData = await refreshRes.json();
-      localStorage.setItem("access_token", refreshData.access);
-      token = refreshData.access;
+    if (newToken) {
+      localStorage.setItem("access_token", newToken);
+      token = newToken;
 
       headers.set("Authorization", `Bearer ${token}`);
       res = await fetch(url, {

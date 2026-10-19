@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'core',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
@@ -190,6 +191,10 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
+    # Each refresh issues a new refresh token and revokes the old one, so a
+    # stolen or logged-out token cannot be reused.
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 
@@ -280,6 +285,9 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Start HSTS short; raise (e.g. to 31536000) once HTTPS is confirmed stable everywhere.
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '3600'))
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 # ==============================================================================
 # Logging (request timing from core.middleware.ServerTimingMiddleware)
