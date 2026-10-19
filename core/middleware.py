@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import time
 
@@ -5,7 +6,10 @@ from django.db import connection
 
 logger = logging.getLogger("core.timing")
 
-_proxy_shape_logged = False
+# Distinct proxy-header patterns already logged by this worker (bounded).
+_proxy_shapes_seen = set()
+_MAX_PROXY_SHAPES = 20
+_CLIENT_IP_HEADERS = ("HTTP_CF_CONNECTING_IP", "HTTP_TRUE_CLIENT_IP", "HTTP_X_REAL_IP")
 
 
 class ServerTimingMiddleware:
@@ -19,7 +23,7 @@ class ServerTimingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        self._log_proxy_shape_once(request)
+        self._log_proxy_shape(request)
 
         db_stats = {"time": 0.0, "count": 0}
 
@@ -53,12 +57,29 @@ class ServerTimingMiddleware:
         return response
 
     @staticmethod
-    def _log_proxy_shape_once(request):
-        """Log how many hops X-Forwarded-For carries, to size DRF's NUM_PROXIES."""
-        global _proxy_shape_logged
-        if _proxy_shape_logged:
+    def _log_proxy_shape(request):
+        """
+        Log each distinct proxy-header pattern once (hop count, which client-IP
+        headers are present, whether the peer is a private address), to size
+        DRF's NUM_PROXIES. Never logs IP addresses themselves.
+        """
+        if len(_proxy_shapes_seen) >= _MAX_PROXY_SHAPES:
             return
-        _proxy_shape_logged = True
         xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
         hops = len([h for h in xff.split(",") if h.strip()]) if xff else 0
-        logger.info("Proxy shape: X-Forwarded-For hops=%d", hops)
+        present = tuple(h[5:] for h in _CLIENT_IP_HEADERS if request.META.get(h))
+        try:
+            peer_private = ipaddress.ip_address(request.META.get("REMOTE_ADDR", "")).is_private
+        except ValueError:
+            peer_private = None
+        shape = (hops, present, peer_private)
+        if shape in _proxy_shapes_seen:
+            return
+        _proxy_shapes_seen.add(shape)
+        logger.info(
+            "Proxy shape: X-Forwarded-For hops=%d client_ip_headers=%s peer_private=%s path=%s",
+            hops,
+            ",".join(present) or "none",
+            peer_private,
+            request.path,
+        )
