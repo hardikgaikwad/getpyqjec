@@ -47,46 +47,59 @@ async function authFetch(url, options = {}) {
   return res;
 }
 
-const fetchUrls = async (queries) => {
-  const res = await fetch(`${API_BASE}/download/?` + queries);
+/**
+ * Gets presigned R2 links for the selected papers, downloads them directly from
+ * R2 and merges them in the browser. Papers that fail to download are reported
+ * as missing, the same way the server-side merge used to.
+ */
+const fetchUrls = async (queries, { signal, onProgress } = {}) => {
+  const res = await fetch(`${API_BASE}/download/links/?` + queries, { signal });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    let errorMsg = errorData.error || "Failed to fetch data";
-    if (
-      typeof errorMsg === "string" &&
-      (errorMsg.toLowerCase().includes("nosuchkey") ||
-        errorMsg.toLowerCase().includes("not exist") ||
-        errorMsg.toLowerCase().includes("failed to download object"))
-    ) {
-      errorMsg = "PYQ missing";
+    throw new Error(errorData.error || "Failed to fetch data");
+  }
+  const data = await res.json();
+
+  const { mergePdfsFromUrls } = await import("./pdfMerge");
+  const { blob, failed, networkFailures } = await mergePdfsFromUrls(data.papers, {
+    signal,
+    onProgress,
+  });
+
+  if (!blob) {
+    throw new Error(
+      networkFailures > 0
+        ? "Couldn't download the question papers. Please check your connection and try again."
+        : "PYQ missing"
+    );
+  }
+
+  // Fold papers that couldn't be downloaded into the missing info.
+  const failedIds = new Set(failed.map((p) => p.id));
+  const succeeded = data.papers.filter((p) => !failedIds.has(p.id));
+  const succeededYears = new Set(succeeded.map((p) => p.year));
+  const succeededPairs = new Set(succeeded.map((p) => `${p.year}|${p.subject_code}`));
+
+  const missingYearSet = new Set(data.missing_years);
+  const missingDetails = { ...data.missing_details };
+  for (const p of failed) {
+    if (!succeededYears.has(p.year)) missingYearSet.add(p.year);
+    if (data.is_all_subjects && !succeededPairs.has(`${p.year}|${p.subject_code}`)) {
+      const key = String(p.year);
+      const list = [...(missingDetails[key] || [])];
+      if (!list.some((s) => String(s.code).toUpperCase() === p.subject_code)) {
+        list.push({ name: p.subject_name, code: p.subject_code });
+      }
+      missingDetails[key] = list;
     }
-    throw new Error(errorMsg);
-  }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const disposition = res.headers.get("Content-Disposition");
-  let name = "pyq_download.pdf";
-  if (disposition) {
-    const match = disposition.match(/filename="?(.+?)"?$/);
-    if (match) name = match[1];
   }
 
-  const missingHeader = res.headers.get("X-missing_years");
-  const missingYears = missingHeader
-    ? missingHeader.split(",").map((y) => y.trim())
-    : [];
-
-  const missingDetailsHeader = res.headers.get("X-missing_details");
-  let missingDetails = null;
-  if (missingDetailsHeader) {
-    try {
-      missingDetails = JSON.parse(decodeURIComponent(missingDetailsHeader));
-    } catch {
-      missingDetails = null;
-    }
-  }
-
-  return { url, name, missingYears, missingDetails };
+  return {
+    url: URL.createObjectURL(blob),
+    name: data.filename,
+    missingYears: [...missingYearSet].sort((a, b) => a - b).map(String),
+    missingDetails: Object.keys(missingDetails).length > 0 ? missingDetails : null,
+  };
 };
 
 const uploadData = async (data) => {

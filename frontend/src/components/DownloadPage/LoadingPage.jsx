@@ -1,67 +1,56 @@
 import { useState, useEffect } from 'react';
 import styles from './LoadingPage.module.css';
 
-const LoadingPage = () => {
-  const [messageIndex, setMessageIndex] = useState(0);
-  const [animationType, setAnimationType] = useState('spinner'); // 'spinner', 'dots', 'ring'
+const loadingMessages = [
+  "Loading Data...",
+  "Fetching PYQs...",
+  "Processing Request...",
+  "Almost Ready..."
+];
 
-  const loadingMessages = [
-    "Loading Data...",
+const subtitleMessages = [
+  "Fetching your PYQ papers, please wait",
+  "Searching through question banks",
+  "Preparing your documents",
+  "Getting everything ready"
+];
+
+function progressText(progress) {
+  if (progress.phase === "merging") {
+    return ["Almost Ready...", "Combining papers into one PDF"];
+  }
+  return [
     "Fetching PYQs...",
-    "Processing Request...",
-    "Almost Ready..."
+    `Downloaded ${progress.done} of ${progress.total} paper${progress.total === 1 ? "" : "s"}`,
   ];
-  
-  const subtitleMessages = [
-    "Fetching your PYQ papers, please wait",
-    "Searching through question banks",
-    "Preparing your documents",
-    "Getting everything ready"
-  ];
+}
 
-  // Optional: Rotate loading messages every 2 seconds
+const LoadingPage = ({ progress = null }) => {
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  // Rotate loading messages every 2 seconds until real progress is available
   useEffect(() => {
+    if (progress) return;
     const interval = setInterval(() => {
       setMessageIndex((prevIndex) => (prevIndex + 1) % loadingMessages.length);
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [loadingMessages.length]);
+  }, [progress]);
+
+  const [title, subtitle] = progress
+    ? progressText(progress)
+    : [loadingMessages[messageIndex], subtitleMessages[messageIndex]];
 
   return (
     <div className={styles.body}>
       <div className={styles.loadingContainer}>
-        {/* Spinner Animation */}
+        <div className={styles.spinner}></div>
 
-        {animationType === 'spinner' && (
-          <div className={styles.spinner}></div>
-        )}
-        
-        {/* Dots Animation */}
-        {animationType === 'dots' && (
-          <div className={styles.dotsLoader}>
-            <div className={styles.dot} style={{ animationDelay: '0s' }}></div>
-            <div className={styles.dot} style={{ animationDelay: '0.3s' }}></div>
-            <div className={styles.dot} style={{ animationDelay: '0.6s' }}></div>
-          </div>
-        )}
-        
-        {/* Ring Animation */}
-        {animationType === 'ring' && (
-          <div className={styles.ringLoader}>
-            <div className={styles.ringInner}></div>
-            <div className={styles.ringInner} style={{ animationDelay: '0.6s' }}></div>
-          </div>
-        )}
-        
         {/* Loading Text */}
-        <div className={styles.loadingText}>
-          {loadingMessages[messageIndex]}
-        </div>
-        <div className={styles.loadingSubtitle}>
-          {subtitleMessages[messageIndex]}
-        </div>
-        
+        <div className={styles.loadingText}>{title}</div>
+        <div className={styles.loadingSubtitle}>{subtitle}</div>
+
         {/* Progress Bar */}
         <div className={styles.progressContainer}>
           <div className={styles.progressBar}></div>
