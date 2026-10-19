@@ -1325,3 +1325,63 @@ class Semester1And2CommonTests(TestCase):
 
 
 
+
+
+class ServerTimingMiddlewareTests(TestCase):
+    def test_server_timing_header_present(self):
+        res = self.client.get("/health/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("Server-Timing", res)
+        self.assertIn("total;dur=", res["Server-Timing"])
+        self.assertIn("db;dur=", res["Server-Timing"])
+
+
+class DuplicateRuleCharacterizationTests(TestCase):
+    """Pins down the current duplicate rule: CS/CSE are aliases, sem 1/2 are one group."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201CS231046",
+            email="dup@jecjabalpur.ac.in",
+            name="Dup User",
+            password="testpassword",
+        )
+        StudentVerification.objects.create(user=self.user, status="verified")
+        self.client.force_authenticate(user=self.user)
+        self.pdf_bytes = _create_minimal_pdf_bytes()
+
+    def _upload(self, branch, semester, code):
+        pdf_file = SimpleUploadedFile("sample.pdf", self.pdf_bytes, content_type="application/pdf")
+        return self.client.post(
+            "/upload/",
+            {
+                "branch": branch,
+                "semester": str(semester),
+                "subject_code": code,
+                "year": "2023",
+                "exam_session": "April",
+                "file": pdf_file,
+            },
+            format="multipart",
+        )
+
+    @patch("core.views.get_pyq_storage")
+    def test_cs_upload_blocked_when_cse_paper_exists(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        PYQ.objects.create(
+            branch="CSE", semester=4, subject_code="CS42", year=2023,
+            exam_session="April", r2_object_key="pyqs/CSE/x.pdf", uploaded_by=self.user,
+        )
+        res = self._upload("CS", 4, "CS42")
+        self.assertEqual(res.status_code, 409)
+
+    @patch("core.views.get_pyq_storage")
+    def test_existing_check_lists_cross_semester_common_paper(self, mock_get_storage):
+        PYQ.objects.create(
+            branch="COMMONFORALLBRANCHES", semester=1, subject_code="BT11", year=2023,
+            exam_session="April", r2_object_key="pyqs/COMMONFORALLBRANCHES/x.pdf", uploaded_by=self.user,
+        )
+        res = self.client.get("/upload/?branch=CommonForAllBranches&semester=2&subject_code=BT11")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["uploaded"], [{"year": 2023, "session": "April", "exam_session": "April"}])
