@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .models import StudentVerification, PYQ, SubjectRequest
-from .curriculum import get_subject_name_by_code
+from .curriculum import SUBJECT_CODE_TO_NAME
 
 User = get_user_model()
 
@@ -31,7 +31,10 @@ class PYQUploadHistorySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_subject_name(self, obj):
-        return get_subject_name_by_code(obj.subject_code, default=obj.subject_code)
+        # obj.subject is select_related by the view, so this costs no extra query.
+        if obj.subject_id and obj.subject:
+            return obj.subject.name
+        return SUBJECT_CODE_TO_NAME.get(obj.subject_code.strip().upper(), obj.subject_code)
 
 
 

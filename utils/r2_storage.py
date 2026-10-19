@@ -10,7 +10,6 @@ Never exposes credentials, never logs presigned URLs or sensitive data.
 """
 
 import logging
-import mimetypes
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -165,50 +164,6 @@ class R2StorageService:
             logger.error(f"R2 delete failed for key '{key}': {type(e).__name__}")
             raise R2StorageError(f"Failed to delete object: {e}") from e
 
-    def object_exists(self, key: str) -> bool:
-        """
-        Check whether an object exists in the bucket.
-
-        Returns True if exists, False if not.
-        Raises R2StorageError on unexpected errors.
-        """
-        try:
-            self._client.head_object(
-                Bucket=self.bucket_name,
-                Key=key,
-            )
-            return True
-        except ClientError as e:
-            if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
-                return False
-            logger.error(f"R2 head failed for key '{key}': {type(e).__name__}")
-            raise R2StorageError(f"Failed to check object existence: {e}") from e
-        except BotoCoreError as e:
-            logger.error(f"R2 head failed for key '{key}': {type(e).__name__}")
-            raise R2StorageError(f"Failed to check object existence: {e}") from e
-
-    def get_object_metadata(self, key: str) -> dict:
-        """
-        Retrieve object metadata (size, content type, custom metadata).
-
-        Returns dict with 'content_type', 'content_length', 'metadata', 'last_modified'.
-        Raises R2StorageError on failure.
-        """
-        try:
-            response = self._client.head_object(
-                Bucket=self.bucket_name,
-                Key=key,
-            )
-            return {
-                "content_type": response.get("ContentType", ""),
-                "content_length": response.get("ContentLength", 0),
-                "metadata": response.get("Metadata", {}),
-                "last_modified": response.get("LastModified"),
-            }
-        except (BotoCoreError, ClientError) as e:
-            logger.error(f"R2 metadata failed for key '{key}': {type(e).__name__}")
-            raise R2StorageError(f"Failed to get object metadata: {e}") from e
-
 
 # ---------------------------------------------------------------------------
 # Local Storage Fallback for Development and Testing
@@ -264,24 +219,6 @@ class LocalStorageService:
         if file_path.exists():
             file_path.unlink()
         return True
-
-    def object_exists(self, key: str) -> bool:
-        clean_key = key.lstrip("/")
-        return (self.base_dir / clean_key).exists()
-
-    def get_object_metadata(self, key: str) -> dict:
-        clean_key = key.lstrip("/")
-        file_path = self.base_dir / clean_key
-        if not file_path.exists():
-            raise R2NoSuchKeyError(f"Object not found in local storage: {key}")
-        stat = file_path.stat()
-        mime, _ = mimetypes.guess_type(str(file_path))
-        return {
-            "content_type": mime or "application/octet-stream",
-            "content_length": stat.st_size,
-            "metadata": {},
-            "last_modified": stat.st_mtime,
-        }
 
 
 # ---------------------------------------------------------------------------

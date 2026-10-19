@@ -1138,11 +1138,10 @@ class EmailServiceTests(TestCase):
         )
         with self.settings(RESEND_API_KEY="re_test_key_mock"):
             res = client.post("/auth/forgot-password/", {"email": user.email}, format="json")
-            self.assertEqual(res.status_code, 500)
-            self.assertEqual(
-                res.json(),
-                {"error": "Failed to send password reset email. Please try again later."},
-            )
+            # Same response as for unknown emails, so account existence isn't revealed.
+            unknown = client.post("/auth/forgot-password/", {"email": "nobody@gmail.com"}, format="json")
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json(), unknown.json())
 
     @patch("resend.Emails.send")
     def test_admin_subject_request_approve_sends_email(self, mock_send):
@@ -1637,3 +1636,64 @@ class SeedDevDataTests(TestCase):
             call_command("seed_dev_data", stdout=io.StringIO())
         self.assertGreater(first_count, 0)
         self.assertEqual(PYQ.objects.count(), first_count)
+
+
+class AdminListEfficiencyTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            rno="0201IT231099", email="admin99@gmail.com", name="Admin", password="password123", role="admin",
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_upload_history_query_count_does_not_grow_with_rows(self):
+        subj = Subject.objects.filter(code="IT61").first()
+        for year in range(2010, 2025):
+            PYQ.objects.create(
+                subject=subj, branch="IT", semester=6, subject_code="IT61", year=year,
+                exam_session="April", r2_object_key=f"k{year}", uploaded_by=self.admin,
+            )
+        # count + page (with uploaded_by and subject joined); no per-row subject lookups
+        with self.assertNumQueries(2):
+            res = self.client.get("/admin-api/pyqs/history/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["results"]), 15)
+        self.assertEqual(res.data["results"][0]["subject_name"], subj.name)
+
+    def test_verification_list_tolerates_bad_paging(self):
+        res = self.client.get("/admin-api/verifications/?page=abc&page_size=100000")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["page"], 1)
+        self.assertEqual(res.data["page_size"], 100)
+
+
+class RefreshRotationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201IT231077", email="rotate@gmail.com", name="Rotate", password="strongpassword",
+        )
+
+    def test_refresh_rotates_and_old_token_is_rejected(self):
+        old = str(RefreshToken.for_user(self.user))
+        self.client.cookies["refresh_token"] = old
+        res = self.client.post("/auth/refresh/")
+        self.assertEqual(res.status_code, 200)
+        new = res.cookies["refresh_token"].value
+        self.assertNotEqual(new, old)
+
+        reuse = APIClient()
+        reuse.cookies["refresh_token"] = old
+        self.assertEqual(reuse.post("/auth/refresh/").status_code, 401)
+
+        self.client.cookies["refresh_token"] = new
+        self.assertEqual(self.client.post("/auth/refresh/").status_code, 200)
+
+    def test_logout_revokes_refresh_token(self):
+        token = str(RefreshToken.for_user(self.user))
+        self.client.cookies["refresh_token"] = token
+        self.assertEqual(self.client.post("/auth/logout/").status_code, 200)
+
+        again = APIClient()
+        again.cookies["refresh_token"] = token
+        self.assertEqual(again.post("/auth/refresh/").status_code, 401)

@@ -33,7 +33,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from utils.pdf import compile_pdfs_from_buffers
@@ -337,19 +338,32 @@ class RefreshView(APIView):
         if not refresh_token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
 
+        serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
         try:
-            refresh = RefreshToken(refresh_token)
-            access = str(refresh.access_token)
-            return Response({"access": access}, status=status.HTTP_200_OK)
-        except TokenError as e:
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, InvalidToken) as e:
             logger.warning(f"TokenError on refresh: {e}")
-            return Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+            response = Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+            _delete_refresh_cookie(response)
+            return response
+
+        response = Response({"access": serializer.validated_data["access"]}, status=status.HTTP_200_OK)
+        # ROTATE_REFRESH_TOKENS: the old refresh token is now blacklisted.
+        if "refresh" in serializer.validated_data:
+            _set_refresh_cookie(response, serializer.validated_data["refresh"])
+        return response
 
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                pass  # already expired or revoked; nothing left to invalidate
         response = Response({"message": "Logged out"}, status=status.HTTP_200_OK)
         _delete_refresh_cookie(response)
         return response
@@ -816,14 +830,18 @@ class RequestPasswordResetView(APIView):
 
         email = str(email).strip()
 
+        generic_response = Response(
+            {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
+            status=status.HTTP_200_OK,
+        )
+
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            logger.warning(f"Password reset requested for unregistered email: {email}")
-            return Response(
-                {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
-                status=status.HTTP_200_OK,
-            )
+            # Log a short hash only: no plain-text email addresses in logs.
+            email_hash = hashlib.sha256(email.lower().encode()).hexdigest()[:12]
+            logger.info(f"Password reset requested for unregistered email (sha256:{email_hash})")
+            return generic_response
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = token_generator.make_token(user)
@@ -837,18 +855,13 @@ class RequestPasswordResetView(APIView):
                 user_email=user.email,
                 reset_link=reset_link,
             )
-            logger.info(f"Password reset email sent to {user.email}")
+            logger.info(f"Password reset email sent to user id={user.pk}")
         except Exception as e:
-            logger.error(f"Failed to send password reset email to {user.email}: {e.__class__.__name__}")
-            return Response(
-                {"error": "Failed to send password reset email. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            # Same response as the success path, so the endpoint doesn't reveal
+            # which emails have accounts; the failure is still logged.
+            logger.error(f"Failed to send password reset email to user id={user.pk}: {e.__class__.__name__}")
 
-        return Response(
-            {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
-            status=status.HTTP_200_OK,
-        )
+        return generic_response
 
 
 class ResetPasswordView(APIView):
@@ -1079,8 +1092,14 @@ class VerificationListView(APIView):
         queryset = queryset.order_by('-submitted_at')
 
         # Pagination
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('page_size', 20))
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+        except ValueError:
+            page = 1
+        try:
+            page_size = max(1, min(100, int(request.GET.get('page_size', 20))))
+        except ValueError:
+            page_size = 20
         total = queryset.count()
         start = (page - 1) * page_size
         end = start + page_size
@@ -1299,7 +1318,7 @@ class PYQUploadHistoryView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        queryset = PYQ.objects.select_related('uploaded_by').all()
+        queryset = PYQ.objects.select_related('uploaded_by', 'subject').all()
 
         # Filtering
         branch = request.GET.get('branch', '').strip()

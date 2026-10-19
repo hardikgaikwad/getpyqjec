@@ -421,14 +421,4 @@ const subjects = {
   },
 };
 
-const currentYear = new Date().getFullYear();
-const previousYears = [];
-for (let i = 1; i <= 5; i++) {
-  previousYears.push(currentYear - i);
-}
-
-const years = [];
-for (let i = 0; i <= 1; i++) {
-  years.push(currentYear - i);
-}
-export { branches, subjects, semesters, previousYears, years, ordinals };
+export { branches, subjects, semesters, ordinals };
