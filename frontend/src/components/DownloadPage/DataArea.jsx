@@ -4,8 +4,9 @@ import ErrorPage from "../ErrorPage/Error";
 import pdfIcon from "../../assets/pdficon.svg";
 
 export default function DataArea({ url, onClose }) {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+  // The merged PDF is already in memory, so clicking only hands it to the browser's
+  // save flow. Browsers don't report when a save finishes, so we say "started".
+  const [isStarted, setIsStarted] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -14,8 +15,6 @@ export default function DataArea({ url, onClose }) {
 
   function downloadFile(fileUrl, filename) {
     try {
-      setIsDownloading(true);
-      setIsComplete(false);
       setError(false);
 
       const link = document.createElement("a");
@@ -25,13 +24,11 @@ export default function DataArea({ url, onClose }) {
       link.click();
       document.body.removeChild(link);
 
-      setIsDownloading(false);
-      setIsComplete(true);
+      setIsStarted(true);
 
-      // Reset complete state after 3 seconds
-      setTimeout(() => setIsComplete(false), 3000);
+      // Reset the confirmation after 3 seconds
+      setTimeout(() => setIsStarted(false), 3000);
     } catch (err) {
-      setIsDownloading(false);
       setError(true);
       setErrorMessage(
         `Failed to download file. ${err.message || err}`
@@ -124,20 +121,13 @@ export default function DataArea({ url, onClose }) {
         {/* Download Button */}
         <div className={classes["download-area"]}>
           <button
-            className={`${classes["download-btn"]} ${isDownloading ? classes["downloading"] : ""
-              } ${isComplete ? classes["complete"] : ""}`}
+            className={`${classes["download-btn"]} ${isStarted ? classes["complete"] : ""}`}
             onClick={() => downloadFile(file.url, file.name)}
-            disabled={isDownloading}
           >
-            {isDownloading ? (
-              <span className={classes["btn-content"]}>
-                <span className={classes.spinner}></span>
-                Downloading...
-              </span>
-            ) : isComplete ? (
+            {isStarted ? (
               <span className={classes["btn-content"]}>
                 <span className={classes["check-icon"]}>✓</span>
-                Downloaded!
+                Download started
               </span>
             ) : (
               <span className={classes["btn-content"]}>

@@ -1713,7 +1713,7 @@ class RateLimitTests(TestCase):
         )
 
     def test_login_limited_per_client_ip(self):
-        for _ in range(10):
+        for _ in range(20):
             self.assertEqual(self._login("203.0.113.5").status_code, 401)
         res = self._login("203.0.113.5")
         self.assertEqual(res.status_code, 429)
@@ -1722,7 +1722,7 @@ class RateLimitTests(TestCase):
         self.assertEqual(self._login("198.51.100.7").status_code, 401)
 
     def test_forgot_password_limited(self):
-        for _ in range(5):
+        for _ in range(15):
             self.client.post("/auth/forgot-password/", {"email": "x@gmail.com"},
                              format="json", HTTP_CF_CONNECTING_IP="203.0.113.9")
         res = self.client.post("/auth/forgot-password/", {"email": "x@gmail.com"},
