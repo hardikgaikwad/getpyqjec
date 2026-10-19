@@ -173,7 +173,9 @@ export async function action({ request }) {
     if (!response.ok) {
       if (response.status < 500) {
         const errorData = await response.json();
-        return { error: errorData.error || errorData.detail || "Invalid credentials" };
+        // DRF field errors look like {"password": ["..."]}; show the first one.
+        const fieldError = Object.values(errorData).flat().find((v) => typeof v === "string");
+        return { error: errorData.error || errorData.detail || fieldError || "Invalid credentials" };
       }
       throw new Response(response.statusText || "Server error", {
         status: response.status,

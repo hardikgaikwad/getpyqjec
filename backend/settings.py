@@ -184,7 +184,33 @@ PASSWORD_RESET_TIMEOUT = 300
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    # Only views that declare a `throttle_scope` are limited. Anonymous clients are
+    # identified by CF-Connecting-IP (see core/throttling.py), logged-in users by id.
+    'DEFAULT_THROTTLE_CLASSES': (
+        'core.throttling.ClientScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '10/min',
+        'register': '5/hour',
+        'password_reset': '5/hour',
+        'token_refresh': '30/min',
+        'upload': '30/hour',
+        'subject_request': '10/hour',
+        'verification_submit': '5/hour',
+    },
+}
+
+# Throttle counters live in the default cache (per-worker local memory; no Redis).
+# Tests use a dummy cache so counters never carry over between test cases.
+CACHES = {
+    'default': {
+        'BACKEND': (
+            'django.core.cache.backends.dummy.DummyCache'
+            if 'test' in sys.argv
+            else 'django.core.cache.backends.locmem.LocMemCache'
+        ),
+    }
 }
 
 SIMPLE_JWT = {

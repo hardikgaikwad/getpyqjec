@@ -25,7 +25,7 @@ export default function ForgotPassword() {
       if (res.ok) {
         setMessage(data.message || "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only.");
       } else {
-        setError(data.error || "Failed to send reset link. Please try again.");
+        setError(data.error || data.detail || "Failed to send reset link. Please try again.");
       }
     } catch {
       setError("Could not connect to the server.");

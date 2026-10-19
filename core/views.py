@@ -212,6 +212,7 @@ class SubjectRequestCreateView(APIView):
     Allows authenticated students to submit a request for an unlisted or past subject.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "subject_request"
 
     def post(self, request):
         branch = request.data.get("branch", "").strip()
@@ -286,6 +287,7 @@ class SubjectRequestCreateView(APIView):
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "register"
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -305,6 +307,7 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "login"
 
     def post(self, request):
         rno = request.data.get("rno")
@@ -331,6 +334,7 @@ class LoginView(APIView):
 
 class RefreshView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "token_refresh"
 
     def post(self, request):
         refresh_token = request.COOKIES.get("refresh_token")
@@ -372,10 +376,18 @@ class LogoutView(APIView):
 # ─── PYQ Upload (R2) ─────────────────────────────────────────────────────────
 
 class UploadPYQView(APIView):
+    throttle_scope = "upload"
+
     def get_permissions(self):
         if self.request.method == "GET":
             return [AllowAny()]
         return [IsAuthenticated(), IsVerifiedStudent()]
+
+    def get_throttles(self):
+        # Only uploads are limited; the existing-papers lookup (GET) is a cheap read.
+        if self.request.method == "GET":
+            return []
+        return super().get_throttles()
 
     def get(self, request):
         branch = request.GET.get("branch")
@@ -819,6 +831,7 @@ class DownloadPYQView(APIView):
 
 class RequestPasswordResetView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "password_reset"
 
     def post(self, request):
         email = request.data.get("email")
@@ -920,6 +933,7 @@ class VerificationSubmitView(APIView):
     NEVER sets status to 'verified'. An administrator manually reviews the submission.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "verification_submit"
 
     def post(self, request):
         user = request.user
@@ -1042,6 +1056,7 @@ class VerificationSubmitView(APIView):
 class VerificationResubmitView(APIView):
     """POST — Resubmit after rejection."""
     permission_classes = [IsAuthenticated]
+    throttle_scope = "verification_submit"
 
     def post(self, request):
         user = request.user

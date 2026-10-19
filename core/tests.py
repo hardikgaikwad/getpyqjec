@@ -1697,3 +1697,45 @@ class RefreshRotationTests(TestCase):
         again = APIClient()
         again.cookies["refresh_token"] = token
         self.assertEqual(again.post("/auth/refresh/").status_code, 401)
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+class RateLimitTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+
+    def _login(self, ip):
+        return self.client.post(
+            "/auth/login/", {"rno": "0201IT231046", "password": "wrong"},
+            format="json", HTTP_CF_CONNECTING_IP=ip,
+        )
+
+    def test_login_limited_per_client_ip(self):
+        for _ in range(10):
+            self.assertEqual(self._login("203.0.113.5").status_code, 401)
+        res = self._login("203.0.113.5")
+        self.assertEqual(res.status_code, 429)
+        self.assertIn("Retry-After", res)
+        # A different visitor (different CF-Connecting-IP) is unaffected.
+        self.assertEqual(self._login("198.51.100.7").status_code, 401)
+
+    def test_forgot_password_limited(self):
+        for _ in range(5):
+            self.client.post("/auth/forgot-password/", {"email": "x@gmail.com"},
+                             format="json", HTTP_CF_CONNECTING_IP="203.0.113.9")
+        res = self.client.post("/auth/forgot-password/", {"email": "x@gmail.com"},
+                               format="json", HTTP_CF_CONNECTING_IP="203.0.113.9")
+        self.assertEqual(res.status_code, 429)
+
+    def test_upload_lookup_get_is_not_throttled(self):
+        for _ in range(40):
+            res = self.client.get("/upload/?branch=IT&semester=5&subject_code=IT51",
+                                  HTTP_CF_CONNECTING_IP="203.0.113.10")
+        self.assertEqual(res.status_code, 200)
+
+    def test_unscoped_endpoints_not_throttled(self):
+        for _ in range(40):
+            res = self.client.get("/subjects/?branch=IT&semester=5", HTTP_CF_CONNECTING_IP="203.0.113.11")
+        self.assertEqual(res.status_code, 200)

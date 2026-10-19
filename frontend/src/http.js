@@ -125,7 +125,7 @@ const uploadData = async (data) => {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || "Failed to upload data");
+    throw new Error(errorData.error || errorData.detail || "Failed to upload data");
   }
   return await res.json();
 };
@@ -161,7 +161,7 @@ const submitVerification = async (formData) => {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || "Failed to submit verification");
+    throw new Error(data.error || data.detail || "Failed to submit verification");
   }
   return data;
 };
@@ -174,7 +174,7 @@ const resubmitVerification = async (formData) => {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || "Failed to resubmit verification");
+    throw new Error(data.error || data.detail || "Failed to resubmit verification");
   }
   return data;
 };
@@ -293,7 +293,7 @@ const requestSubjectAddition = async ({ branch, semester, code, name }) => {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || "Failed to submit subject request");
+    throw new Error(errorData.error || errorData.detail || "Failed to submit subject request");
   }
   return await res.json();
 };
