@@ -11,6 +11,7 @@ Never exposes credentials, never logs presigned URLs or sensitive data.
 
 import logging
 import mimetypes
+import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -313,6 +314,20 @@ def is_r2_configured() -> bool:
     return bool(endpoint and access_key and secret_key)
 
 
+def _ensure_local_fallback_allowed(purpose: str):
+    """
+    Refuse the local-disk fallback in production. On Render the disk is wiped on
+    every deploy, so silently falling back would "succeed" and then lose files.
+    """
+    is_testing = "test" in sys.argv
+    if getattr(settings, "DEBUG", False) or getattr(settings, "FORCE_LOCAL_STORAGE", False) or is_testing:
+        return
+    raise R2StorageError(
+        f"Cloudflare R2 is not configured for {purpose} and DEBUG is False; "
+        "refusing to fall back to local disk storage."
+    )
+
+
 def get_pyq_storage():
     """Get the PYQ bucket storage service instance (Cloudflare R2 or local fallback)."""
     global _pyq_storage
@@ -321,6 +336,7 @@ def get_pyq_storage():
         if is_r2_configured():
             _pyq_storage = R2StorageService(bucket)
         else:
+            _ensure_local_fallback_allowed("PYQs")
             logger.info("Cloudflare R2 not configured. Using LocalStorageService for PYQs.")
             _pyq_storage = LocalStorageService(bucket)
     return _pyq_storage
@@ -334,6 +350,7 @@ def get_verification_storage():
         if is_r2_configured():
             _verification_storage = R2StorageService(bucket)
         else:
+            _ensure_local_fallback_allowed("verification")
             logger.info("Cloudflare R2 not configured. Using LocalStorageService for verification.")
             _verification_storage = LocalStorageService(bucket)
     return _verification_storage

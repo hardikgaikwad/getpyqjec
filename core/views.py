@@ -9,7 +9,9 @@ from io import BytesIO
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from utils.email_service import (
     send_password_reset_email,
@@ -870,6 +872,11 @@ class ResetPasswordView(APIView):
         if not new_password:
             return Response({"error": "Password required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({"error": " ".join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
         user.set_password(new_password)
         user.save()
 
@@ -1570,4 +1577,4 @@ class AdminSubjectRequestRejectView(APIView):
             "message": f"Subject request for '{subject_req.code}' was rejected.",
             "status": "rejected",
             "reason": reason,
-        })
+        })

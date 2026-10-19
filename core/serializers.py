@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .models import StudentVerification, PYQ, SubjectRequest
 from .curriculum import get_subject_name_by_code
@@ -39,7 +41,15 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("rno", "email", "name", "password")
-        
+
+    def validate(self, attrs):
+        candidate = User(rno=attrs.get("rno"), email=attrs.get("email"), name=attrs.get("name"))
+        try:
+            validate_password(attrs.get("password"), user=candidate)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+        return attrs
+
     def create(self, validated_data):
         return User.objects.create_user(
             rno=validated_data["rno"],

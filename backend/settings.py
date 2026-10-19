@@ -16,6 +16,7 @@ import os
 import sys
 from dotenv import load_dotenv
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,11 +39,15 @@ FORCE_LOCAL_DB = CONTRIBUTOR_MODE or os.environ.get('FORCE_LOCAL_DB', 'False').l
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-getpyqjec-local-key')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is False.")
+    SECRET_KEY = 'django-insecure-getpyqjec-local-key'
 
 _host_ip = os.environ.get('VITE_HOST_IP', '')
 _render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
@@ -240,9 +245,11 @@ if extra_cors:
             if o not in CORS_ALLOWED_ORIGINS:
                 CORS_ALLOWED_ORIGINS.append(o)
 
+# Only first-party subdomains. Do NOT add a *.vercel.app pattern: with credentials
+# enabled, any site deployed on vercel.app could mint access tokens via /auth/refresh/.
+# Add specific preview/mirror origins through the CORS_ALLOWED_ORIGINS env var instead.
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.getpyqjec\.in$",
-    r"^https://.*\.vercel\.app$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

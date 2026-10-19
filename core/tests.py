@@ -1385,3 +1385,51 @@ class DuplicateRuleCharacterizationTests(TestCase):
         res = self.client.get("/upload/?branch=CommonForAllBranches&semester=2&subject_code=BT11")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["uploaded"], [{"year": 2023, "session": "April", "exam_session": "April"}])
+
+
+class SecurityConfigTests(TestCase):
+    def test_cors_rejects_foreign_vercel_origin(self):
+        res = self.client.options(
+            "/auth/refresh/",
+            HTTP_ORIGIN="https://evil-site.vercel.app",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        )
+        self.assertNotIn("Access-Control-Allow-Origin", res)
+
+    def test_cors_allows_first_party_origin(self):
+        res = self.client.options(
+            "/auth/refresh/",
+            HTTP_ORIGIN="https://www.getpyqjec.in",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        )
+        self.assertEqual(res.get("Access-Control-Allow-Origin"), "https://www.getpyqjec.in")
+
+    def test_register_rejects_weak_password(self):
+        res = APIClient().post("/auth/register/", {
+            "rno": "0201CS231002",
+            "email": "weak@gmail.com",
+            "name": "Weak Password",
+            "password": "12345678",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("password", res.data)
+        self.assertFalse(User.objects.filter(rno="0201CS231002").exists())
+
+    def test_reset_rejects_weak_password(self):
+        user = User.objects.create_user(
+            rno="0201CS231003", email="reset@gmail.com", name="Reset", password="strongpassword"
+        )
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = PasswordResetTokenGenerator().make_token(user)
+        res = APIClient().post(f"/auth/reset-password/{uid}/{token}/", {"password": "password"}, format="json")
+        self.assertEqual(res.status_code, 400)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("strongpassword"))
+
+    @patch("utils.r2_storage.is_r2_configured", return_value=False)
+    def test_storage_refuses_local_fallback_in_production(self, _mock):
+        import utils.r2_storage as r2
+        with patch.object(r2, "_pyq_storage", None), patch.object(r2.sys, "argv", ["gunicorn"]), \
+                self.settings(DEBUG=False, FORCE_LOCAL_STORAGE=False):
+            with self.assertRaises(R2StorageError):
+                r2.get_pyq_storage()
