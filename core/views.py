@@ -12,7 +12,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from utils.email_service import (
     send_password_reset_email,
     send_verification_approved_email,
@@ -44,8 +44,8 @@ from utils.r2_storage import (
     get_verification_storage,
 )
 
-from .academics import COMMON_BRANCH, is_common_scope, scope_filter, subject_name_map
-from .curriculum import get_expected_subjects, SUBJECT_CODE_TO_NAME, get_subject_name_by_code
+from .academics import scope_filter, subject_name_map, validate_paper_identity
+from .curriculum import get_expected_subjects, SUBJECT_CODE_TO_NAME
 from .models import PYQ, StudentVerification, Subject, SubjectRequest
 from .permissions import IsAdminUser, IsVerifiedStudent
 from .serializers import (
@@ -433,34 +433,41 @@ class UploadPYQView(APIView):
             )
 
         try:
-            branch = branch.strip().upper()
-            semester = int(semester)
-            subject_code = subject_code.strip().upper()
-            year = int(year)
-            exam_session = exam_session.strip().capitalize()
-            if exam_session not in ("April", "December"):
-                raise ValueError("Exam session must be 'April' or 'December'")
-        except Exception as e:
+            paper = validate_paper_identity(branch, semester, subject_code, year, exam_session)
+        except ValueError as e:
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        branch = paper["branch"]
+        semester = paper["semester"]
+        subject_code = paper["subject_code"]
 
-        is_common_sem = is_common_scope(branch, semester)
-        if is_common_sem:
-            branch = COMMON_BRANCH
-        scope = scope_filter(branch, semester, include_input_branch=True)
         duplicate_filter = {
             **scope_filter(branch, semester),
             "subject_code": subject_code,
-            "year": year,
-            "exam_session": exam_session,
+            "year": paper["year"],
+            "exam_session": paper["exam_session"],
         }
-
         if PYQ.objects.filter(**duplicate_filter).exists():
             return Response(
                 {"error": "PYQ already exists for this subject/year/session"},
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        # Only subjects already in the catalog may receive uploads; new subjects go
+        # through the admin-reviewed SubjectRequest flow. The client-sent name is ignored.
+        scope = scope_filter(branch, semester, include_input_branch=True)
+        subj = Subject.objects.filter(**scope, code=subject_code).first()
+        in_catalog = (
+            subj is not None
+            or subject_code in SUBJECT_CODE_TO_NAME
+            or PYQ.objects.filter(**scope_filter(branch, semester), subject_code=subject_code).exists()
+        )
+        if not in_catalog:
+            return Response(
+                {"error": "This subject is not in the catalog yet. Please request it using 'Add unlisted subjects'."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate PDF magic header
@@ -490,39 +497,43 @@ class UploadPYQView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Resolve or auto-register Subject
-        subj = Subject.objects.filter(**scope, code=subject_code).first()
-
-        if not subj:
-            custom_name = request.POST.get("subject_name", "").strip() or get_subject_name_by_code(subject_code, subject_code)
-            subj, _ = Subject.objects.get_or_create(
-                branch=branch,
-                semester=semester,
-                code=subject_code,
-                name=custom_name,
-                defaults={"is_current": False},
-            )
-
-        # Save metadata to database with cleanup on failure
+        # Save metadata; the unique constraint is the final word on duplicates, so a
+        # concurrent upload of the same paper ends in a 409 rather than a second row.
         try:
-            pyq = PYQ.objects.create(
-                subject=subj,
-                branch=branch,
-                semester=semester,
-                subject_code=subject_code,
-                year=year,
-                exam_session=exam_session,
-                r2_object_key=object_key,
-                file_hash=file_hash,
-                uploaded_by=request.user,
-            )
+            with transaction.atomic():
+                if subj is None and subject_code in SUBJECT_CODE_TO_NAME:
+                    subj, _ = Subject.objects.get_or_create(
+                        branch=branch,
+                        semester=semester,
+                        code=subject_code,
+                        name=SUBJECT_CODE_TO_NAME[subject_code],
+                        defaults={"is_current": False},
+                    )
+                pyq = PYQ.objects.create(
+                    subject=subj,
+                    branch=branch,
+                    semester=semester,
+                    subject_code=subject_code,
+                    year=paper["year"],
+                    exam_session=paper["exam_session"],
+                    r2_object_key=object_key,
+                    file_hash=file_hash,
+                    uploaded_by=request.user,
+                )
         except Exception as db_err:
-            logger.error(f"Database error saving PYQ: {db_err}. Cleaning up R2 object {object_key}.")
+            is_duplicate = isinstance(db_err, IntegrityError)
+            if not is_duplicate:
+                logger.error(f"Database error saving PYQ: {db_err}. Cleaning up R2 object {object_key}.")
             try:
                 storage.delete_object(object_key)
-            except Exception as cleanup_err:
+            except R2StorageError as cleanup_err:
                 logger.error(f"Failed to cleanup orphaned R2 object {object_key}: {cleanup_err}")
 
+            if is_duplicate:
+                return Response(
+                    {"error": "PYQ already exists for this subject/year/session"},
+                    status=status.HTTP_409_CONFLICT,
+                )
             return Response(
                 {"error": "Failed to save PYQ record in database."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

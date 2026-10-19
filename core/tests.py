@@ -1518,3 +1518,122 @@ class SubjectListQueryTests(TestCase):
         past_codes = [s["code"] for s in res.json()["past_subjects"]]
         self.assertIn("ZZ99", past_codes)
         self.assertIn("max-age=60", res["Cache-Control"])
+
+
+class UploadIntegrityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201CS231050", email="integrity@gmail.com", name="Integrity", password="testpassword",
+        )
+        StudentVerification.objects.create(user=self.user, status="verified")
+        self.client.force_authenticate(user=self.user)
+        self.pdf_bytes = _create_minimal_pdf_bytes()
+
+    def _upload(self, **overrides):
+        data = {
+            "branch": "CSE", "semester": "4", "subject_code": "CS42",
+            "year": "2023", "exam_session": "April",
+            "file": SimpleUploadedFile("p.pdf", self.pdf_bytes, content_type="application/pdf"),
+        }
+        data.update(overrides)
+        return self.client.post("/upload/", data, format="multipart")
+
+    @patch("core.views.get_pyq_storage")
+    def test_cs_upload_is_stored_as_cse(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        res = self._upload(branch="CS")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(PYQ.objects.get(id=res.data["id"]).branch, "CSE")
+
+    @patch("core.views.get_pyq_storage")
+    def test_unknown_subject_code_rejected_without_creating_subject(self, mock_get_storage):
+        storage = MagicMock()
+        mock_get_storage.return_value = storage
+        res = self._upload(subject_code="ZZ999", subject_name="Made Up Subject")
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Subject.objects.filter(code="ZZ999").exists())
+        storage.upload_object.assert_not_called()
+
+    @patch("core.views.get_pyq_storage")
+    def test_client_subject_name_is_ignored(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        res = self._upload(subject_name="Hacked Name")
+        self.assertEqual(res.status_code, 201)
+        self.assertFalse(Subject.objects.filter(name="Hacked Name").exists())
+
+    def test_invalid_fields_rejected(self):
+        for overrides in (
+            {"branch": "../../etc"},
+            {"semester": "9"},
+            {"year": "1990"},
+            {"exam_session": "June"},
+            {"subject_code": "CS 42/../x"},
+        ):
+            with self.subTest(**overrides):
+                self.assertEqual(self._upload(**overrides).status_code, 400)
+
+    @patch("core.views.get_pyq_storage")
+    def test_concurrent_duplicate_returns_409_and_cleans_up(self, mock_get_storage):
+        from django.db import IntegrityError
+        storage = MagicMock()
+        mock_get_storage.return_value = storage
+        # Simulate another request inserting the same paper between the check and the insert.
+        with patch("core.views.PYQ.objects.create", side_effect=IntegrityError("duplicate")):
+            res = self._upload()
+        self.assertEqual(res.status_code, 409)
+        storage.delete_object.assert_called_once()
+
+    def test_db_constraint_blocks_common_semester_duplicate(self):
+        from django.db import IntegrityError, transaction
+        PYQ.objects.create(
+            branch="COMMONFORALLBRANCHES", semester=1, subject_code="BT11", year=2023,
+            exam_session="April", r2_object_key="a",
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PYQ.objects.create(
+                branch="COMMONFORALLBRANCHES", semester=2, subject_code="BT11", year=2023,
+                exam_session="April", r2_object_key="b",
+            )
+
+
+class CanonicalizeMigrationTests(TestCase):
+    def _run(self):
+        import importlib
+        from django.apps import apps as global_apps
+        migration = importlib.import_module("core.migrations.0011_pyq_canonical_unique_paper")
+        migration.canonicalize_pyq_branches(global_apps, None)
+
+    def test_rewrites_cs_and_common_branches(self):
+        cs = PYQ.objects.create(branch="CS", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="a")
+        common = PYQ.objects.create(branch="CommonForAllBranches", semester=2, subject_code="BT21", year=2022, exam_session="April", r2_object_key="b")
+        self._run()
+        cs.refresh_from_db()
+        common.refresh_from_db()
+        self.assertEqual(cs.branch, "CSE")
+        self.assertEqual(common.branch, "COMMONFORALLBRANCHES")
+
+    def test_aborts_on_conflicting_rows(self):
+        PYQ.objects.create(branch="CS", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="a")
+        PYQ.objects.create(branch="CSE", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="b")
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.assertTrue(PYQ.objects.filter(branch="CS").exists())
+
+
+class SeedDevDataTests(TestCase):
+    def test_seed_twice_creates_no_duplicate_papers(self):
+        import tempfile
+        from django.core.management import call_command
+        from utils.r2_storage import LocalStorageService
+
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root), \
+                patch("core.management.commands.seed_dev_data.get_pyq_storage",
+                      side_effect=lambda: LocalStorageService("pyqs")), \
+                patch("core.management.commands.seed_dev_data.get_verification_storage",
+                      side_effect=lambda: LocalStorageService("verifications")):
+            call_command("seed_dev_data", stdout=io.StringIO())
+            first_count = PYQ.objects.count()
+            call_command("seed_dev_data", stdout=io.StringIO())
+        self.assertGreater(first_count, 0)
+        self.assertEqual(PYQ.objects.count(), first_count)

@@ -7,6 +7,7 @@ from django.utils import timezone
 from PIL import Image, ImageDraw
 
 from core.models import User, Subject, PYQ, StudentVerification, SubjectRequest
+from core.academics import scope_filter
 from utils.r2_storage import get_pyq_storage, get_verification_storage, LocalStorageService
 
 logger = logging.getLogger(__name__)
@@ -237,19 +238,31 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f"  Error uploading sample PDF for {subj.code}: {e}"))
 
-                PYQ.objects.update_or_create(
-                    branch=db_branch,
-                    semester=subj.semester,
+                # Match across the semester 1/2 group so re-seeding never creates a
+                # second copy of a common paper (blocked by the pyq_unique_paper constraint).
+                existing = PYQ.objects.filter(
+                    **scope_filter(db_branch, subj.semester),
                     subject_code=subj.code,
                     year=year,
                     exam_session=session,
-                    defaults={
-                        "subject": subj,
-                        "r2_object_key": object_key,
-                        "file_hash": file_hash,
-                        "uploaded_by": admin_user,
-                    },
-                )
+                ).first()
+                fields = {
+                    "subject": subj,
+                    "r2_object_key": object_key,
+                    "file_hash": file_hash,
+                    "uploaded_by": admin_user,
+                }
+                if existing:
+                    PYQ.objects.filter(pk=existing.pk).update(**fields)
+                else:
+                    PYQ.objects.create(
+                        branch=db_branch,
+                        semester=subj.semester,
+                        subject_code=subj.code,
+                        year=year,
+                        exam_session=session,
+                        **fields,
+                    )
                 pyq_count += 1
 
         self.stdout.write(self.style.SUCCESS(f"  [+] {pyq_count} sample PYQ papers seeded with generated PDF files."))

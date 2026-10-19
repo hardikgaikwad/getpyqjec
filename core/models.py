@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.db.models import Case, F, IntegerField, Value, When
 from django.core.validators import RegexValidator
 from .managers import UserManager
 
@@ -136,10 +137,22 @@ class PYQ(models.Model):
     class Meta:
         verbose_name = "PYQ"
         verbose_name_plural = "PYQs"
-        unique_together = ('branch', 'semester', 'subject_code', 'year', 'exam_session')
         ordering = ['subject_code', 'year', 'exam_session']
         indexes = [
             models.Index(fields=['branch', 'semester', 'year'], name='pyq_lookup_idx'),
+        ]
+        constraints = [
+            # One paper per subject/year/session within an academic scope. Branches are
+            # stored canonically (CSE, COMMONFORALLBRANCHES) and semesters 1 and 2 form
+            # one group, matching core.academics.scope_filter.
+            models.UniqueConstraint(
+                F('branch'),
+                Case(When(semester__lte=2, then=Value(0)), default=F('semester'), output_field=IntegerField()),
+                F('subject_code'),
+                F('year'),
+                F('exam_session'),
+                name='pyq_unique_paper',
+            ),
         ]
         
     def __str__(self):
