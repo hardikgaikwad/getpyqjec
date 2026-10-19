@@ -27,7 +27,8 @@
     - [Prerequisites](#prerequisites)
     - [Backend Setup](#backend-setup-django)
     - [Frontend Setup](#frontend-setup-react)
-6. [Project Structure](#-project-structure)
+6. [Deployment Notes](#-deployment-notes)
+7. [Project Structure](#-project-structure)
 
 ---
 
@@ -35,21 +36,25 @@
 **[GetPYQJEC](https://www.getpyqjec.in)** is an advanced academic resource platform designed to centralize and organize college examination papers. It solves the chaotic spread of academic materials across messaging groups and drives by providing an ultra-fast, structured search, multi-year PDF compile-and-download system, and a verified community contribution workflow.
 
 * 🌐 **Live Website**: [https://www.getpyqjec.in](https://www.getpyqjec.in)
-* ⚡ **Alternative Mirror**: [https://getpyqjec.vercel.app](https://getpyqjec.vercel.app/)
+* ↪️ **Old address**: [https://getpyqjec.vercel.app](https://getpyqjec.vercel.app/) now permanently redirects to the live website.
 
 ---
 
 ## ✨ Key Features
 
 - 🚀 **Lightning-Fast Modern UI**: Powered by React 19 and Vite 7 with custom Heming typography, sleek responsive controls, and unified `CustomSelect` dropdowns.
-- ☁️ **Cloudflare R2 Cloud Storage**: Zero-egress-fee, S3-compatible cloud object storage via `boto3` for high-availability PDF and ID card hosting (with automatic local disk fallback).
-- 📑 **Dynamic PDF Merging**: On-the-fly multi-year question paper merging and streaming via `pikepdf` thread pools.
+- 📱 **One-Screen Forms on Every Device**: The download (landing) and upload pages fit the heading, form and buttons on a single screen from small phones to desktops, with height-aware spacing and a two-column phone layout. Dropdowns open upwards when there's no room below and always stay on screen.
+- ☁️ **Cloudflare R2 Cloud Storage**: Zero-egress-fee, S3-compatible cloud object storage via `boto3` for PDF and ID card hosting (local disk storage is used only in development).
+- 📑 **In-Browser PDF Merging**: The backend returns short-lived presigned R2 links for the selected papers; the browser downloads them directly from R2 (4 at a time, with progress) and merges them into one PDF with `pdf-lib`. File bytes never pass through the API server. Papers that are missing or fail to download are listed on the result card.
 - 📸 **In-Browser Multi-Image to PDF**: Contributors can capture or upload multiple photos/scans of question paper pages and compile them into a single clean PDF in-browser using `pdf-lib`.
 - 🎓 **Student Verification Workflow**: Contributor access is protected by an ID-card verification lifecycle, allowing administrators to inspect and verify students before granting paper upload rights.
 - 📚 **Unlisted Subject Approval**: When syllabus electives or updated course codes are not yet in the catalog, contributors can request unlisted subjects for admin approval directly into the curriculum.
 - 📜 **Paper Upload History & Audit Logs**: Administrators have direct visibility into all community paper submissions, with individual paper audit trails, uploader details, and direct one-click PDF validation links.
 - ⚡ **Dynamic Upload Filtering**: Upload forms automatically query existing papers and omit years and sessions where papers are already available to prevent duplicates.
-- 🔐 **JWT Authentication & Moderation**: Secure cookie-managed token authentication, role-based permissions (`IsVerifiedStudent`, `IsAdminUser`), and admin review dashboards.
+- 🧱 **Database-Enforced Duplicate Prevention**: Uploads are validated (branch, semester, year, session, catalog subject code) and stored with canonical branch names. A unique constraint treats semesters 1 and 2 as one common group, so the same paper can't be stored twice, even under concurrent uploads (returns `409`).
+- 🔐 **JWT Authentication & Moderation**: HttpOnly refresh cookie with token rotation and blacklisting on logout, password strength validation, role-based permissions (`IsVerifiedStudent`, `IsAdminUser`), and admin review dashboards.
+- 🛡️ **Rate Limiting & Hardening**: Per-IP limits on login, registration, password reset, token refresh, uploads, subject requests and verification submissions (using Cloudflare's `CF-Connecting-IP`). CORS allows only the official domains; production refuses to start without a `SECRET_KEY` and never silently falls back to local storage.
+- 📈 **Built-in Request Timing**: Every API response carries a `Server-Timing` header (total time, DB time and query count), visible in browser devtools and logged per request.
 - 📬 **Automated Transactional Emails**: Password reset links and verification review results delivered via Resend API (printed directly to console in local development).
 
 ---
@@ -63,17 +68,17 @@
 |          - Student Verification Portal  - In-Browser Multi-Image to PDF (pdf-lib)       |
 +--------+----------------------------+-----------------------------+---------------------+
          |                            |                             |
-         | HTTP / JSON                | HTTP / JSON                 | Multipart / Streams
-         | Auth & Verification        | Query & Search              | Uploads & Downloads
+         | HTTP / JSON                | HTTP / JSON                 | Multipart / JSON
+         | Auth & Verification        | Query & Search              | Uploads & Download Links
          v                            v                             v
-+--------------------+       +--------------------+        +--------------------+
-|    Auth & Roles    |       |   PYQ Query Engine |        | PDF Merge Service  |
-|   (Django / JWT)   |       |   (Django / DRF)   |        | (Django / pikepdf) |
-|                    |       |                    |        |                    |
-| * Contributor Auth |       | * Existing Options |        | * ThreadPool Merge |
-| * ID Verification  |       | * Filter by Branch |        | * Stream Downloads |
-| * Subject Requests |       | * Semester/Subject |        | * In-Memory Memory |
-+--------+-----------+       +--------+-----------+        +--------+-----------+
++--------------------+       +--------------------+        +----------------------+
+|    Auth & Roles    |       |   PYQ Query Engine |        | Upload & Link Service|
+|   (Django / JWT)   |       |   (Django / DRF)   |        |   (Django / boto3)   |
+|                    |       |                    |        |                      |
+| * Contributor Auth |       | * Existing Options |        | * Validated Uploads  |
+| * ID Verification  |       | * Filter by Branch |        | * Presigned R2 Links |
+| * Rate Limiting    |       | * Semester/Subject |        |   (/download/links/) |
++--------+-----------+       +--------+-----------+        +--------+-------------+
          |                            |                             |
          |                            v                             |
          |             +------------------------------+             |
@@ -90,7 +95,13 @@
                        |                              |
                        |  Bucket: getpyqjec-pyqs      |
                        |  Bucket: getpyqjec-verif...  |
-                       |  (Fallback: local ./media/)  |
+                       |  (Dev only: local ./media/)  |
+                       +------------------------------+
+                                      ^
+                                      | Presigned GET (direct, no API hop)
+                       +------------------------------+
+                       |  Browser: fetch papers and   |
+                       |  merge into one PDF (pdf-lib)|
                        +------------------------------+
 ```
 
@@ -102,17 +113,19 @@
 * **React 19**: Modern component-driven UI architecture.
 * **Vite 7**: Rapid development tooling, hot-module replacement (HMR), and production asset bundling.
 * **React Router DOM 7**: Client-side single-page application routing with code splitting.
-* **pdf-lib**: In-browser client-side multi-image scan to PDF compilation.
+* **pdf-lib** (lazy-loaded): In-browser merging of downloaded papers and multi-image scan to PDF compilation.
 * **Custom Design System**: Bespoke vanilla CSS tokens, responsive layouts, Heming typography, and unified select menus.
 
 ### Backend
 * **Django 5.2 (LTS) & Django REST Framework (DRF)**: High-performance RESTful API endpoints.
-* **Simple JWT**: Token-based authentication with secure cookie handling.
-* **Cloudflare R2 (`boto3`) & Local Disk Storage**: Scalable object storage for papers and verification media with zero-config local fallback.
-* **Pikepdf**: Low-level high-speed PDF concatenation and generation.
+* **Simple JWT**: Token-based authentication with secure cookie handling, refresh-token rotation and blacklisting.
+* **DRF Throttling**: Scoped, per-IP rate limits on sensitive endpoints.
+* **Cloudflare R2 (`boto3`) & Local Disk Storage**: Object storage for papers and verification media, with presigned download links; local disk storage in development.
+* **Pikepdf**: Used only by the legacy server-side `/download/` endpoint, which is kept temporarily for old clients and will be removed.
 * **Resend**: Transactional emails for password resets and verification approvals with automatic terminal console fallback.
 * **WhiteNoise**: Direct static file serving for containerized environments.
-* **PostgreSQL / SQLite**: Relational database with specialized composite indexes (`pyq_lookup_idx`).
+* **PostgreSQL / SQLite**: Relational database with composite indexes (`pyq_lookup_idx`) and a functional unique constraint (`pyq_unique_paper`). Connection health checks keep pooled NeonDB connections reliable.
+* **Gunicorn (gthread)**: 2 workers × 4 threads in production.
 
 ---
 
@@ -251,23 +264,42 @@ This project is licensed under the terms of the [MIT License](LICENSE).
 
 ---
 
+## 🚢 Deployment Notes
+
+Production runs the React build on Vercel, the Django API on Render (Docker), PostgreSQL on NeonDB and files on Cloudflare R2. A few settings matter for the features above (set in each platform's environment settings; never commit values):
+
+* **R2 bucket CORS**: The PYQ bucket must allow `GET` from the site origins (`https://www.getpyqjec.in`, `https://getpyqjec.in`), because browsers download papers straight from R2.
+* **`DEBUG=False` and `SECRET_KEY`**: Required in production; the app refuses to start without a `SECRET_KEY` when debug is off.
+* **`CORS_ALLOWED_ORIGINS`**: Optional comma-separated extra origins (e.g. a preview deployment). Only `*.getpyqjec.in` is allowed by pattern.
+* **`SECURE_HSTS_SECONDS`**: HSTS max-age (defaults to 1 hour; raise it once HTTPS is confirmed everywhere).
+* **Migrations** run automatically when the container starts. Before deploying a migration that adds constraints, take a NeonDB branch snapshot.
+* **Benchmarking**: `scripts/bench.py` measures cold and warm latency (p50/p95/p99) of API endpoints. Run it against local or staging, not production.
+
+---
+
 ## 📂 Project Structure
 
 ```text
 getpyqjec/
 ├── backend/               # Django project settings, WSGI, and root routing
 ├── core/                  # Main DRF app: models, views, serializers, tests, migrations
+│   ├── academics.py       # Shared branch/semester rules and upload validation
+│   ├── middleware.py      # Server-Timing header and request logging
+│   ├── throttling.py      # Per-IP rate limiting behind Cloudflare
 │   └── management/        # Custom management commands (seed_dev_data)
 ├── frontend/              # React single-page application
 │   ├── public/            # Static assets (official logo favicon)
 │   ├── src/               # React components, CustomSelect, AuthContext, HTTP layer
 │   │   ├── assets/        # Official brand logo (logo.png) & Heming variable font
 │   │   ├── components/    # DownloadPage, UploadPage, VerificationPage, UnlistedSubjectApproval, UploadHistory
+│   │   ├── hooks/         # useSubjects: session-cached subject lists
 │   │   ├── store/         # Global authentication and verification state
 │   │   ├── http.js        # Centralized API fetch methods
+│   │   ├── pdfMerge.js    # Downloads papers from R2 and merges them in the browser
 │   │   └── imgTopdf.js    # Client-side multi-image to PDF compiler
 │   └── package.json       # Frontend scripts and dependencies
 ├── utils/                 # Utilities: Cloudflare R2 / Local storage and Resend email service
+├── scripts/               # bench.py latency benchmark
 ├── templates/             # Custom HTML templates and admin overrides
 ├── Dockerfile             # Production container image definition
 ├── docker-compose.yml     # Local one-command development environment
