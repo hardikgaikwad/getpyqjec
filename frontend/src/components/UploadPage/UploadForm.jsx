@@ -1,20 +1,19 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import styles from "./UploadForm.module.css";
-import {
-  branches,
-  subjects,
-  semesters,
-  ordinals,
-} from "../../information";
+import { branches, semesters } from "../../information";
 import createPdfFromImages from "../../imgTopdf";
 import CustomSelect from "../CustomSelect/CustomSelect";
-import { fetchSubjects, requestSubjectAddition, fetchExistingPYQs } from "../../http";
+import { requestSubjectAddition, fetchExistingPYQs } from "../../http";
+import useSubjects from "../../hooks/useSubjects";
 import { useAuth } from "../../store/AuthContext";
 import ErrorPage from "../ErrorPage/Error";
 
 // Generate current year + last 10 years (descending)
 const currentYear = new Date().getFullYear();
 const allYears = Array.from({ length: 11 }, (_, i) => currentYear - i);
+
+// Must match MAX_PDF_SIZE_MB in core/views.py
+const MAX_PDF_SIZE_MB = 10;
 
 const ALL_SESSIONS = [
   { value: "April", label: "April" },
@@ -33,8 +32,6 @@ const initialState = {
 export default function UploadFormPYQ({ uploadFn }) {
   const { logout } = useAuth();
   const [selectedValues, setSelectedValues] = useState(initialState);
-  const [dynamicSubjects, setDynamicSubjects] = useState({ current: [], past: [] });
-  const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [existingPYQs, setExistingPYQs] = useState([]);
   const [loadingExistingPYQs, setLoadingExistingPYQs] = useState(false);
   const [customSubjectCode, setCustomSubjectCode] = useState("");
@@ -116,48 +113,10 @@ export default function UploadFormPYQ({ uploadFn }) {
     setDragIndex(null);
   }
 
-  // Fetch subjects dynamically from backend
-  useEffect(() => {
-    if (!selectedValues.semester || !selectedValues.branch) {
-      setDynamicSubjects({ current: [], past: [] });
-      return;
-    }
-
-    let isMounted = true;
-    setLoadingSubjects(true);
-
-    fetchSubjects(selectedValues.branch, selectedValues.semester)
-      .then((data) => {
-        if (isMounted) {
-          setDynamicSubjects({
-            current: data.current_subjects || [],
-            past: data.past_subjects || [],
-          });
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to load dynamic subjects, falling back to static list", err);
-        const sem = selectedValues.semester;
-        const branch = selectedValues.branch;
-        const branchSubjects =
-          Number(sem) <= 2
-            ? subjects.CommonForAllBranches?.[ordinals[sem]]
-            : subjects[branch]?.[ordinals[sem]];
-        if (isMounted && branchSubjects) {
-          setDynamicSubjects({
-            current: branchSubjects.map((s) => ({ code: s[1], name: s[0] })),
-            past: [],
-          });
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoadingSubjects(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedValues.branch, selectedValues.semester]);
+  const { subjects: dynamicSubjects, loading: loadingSubjects } = useSubjects(
+    selectedValues.branch,
+    selectedValues.semester
+  );
 
   const subjectsToShow = useMemo(() => {
     if (!selectedValues.semester || !selectedValues.branch) return [];
@@ -218,26 +177,24 @@ export default function UploadFormPYQ({ uploadFn }) {
       return;
     }
 
-    let isMounted = true;
+    const controller = new AbortController();
     setLoadingExistingPYQs(true);
 
-    fetchExistingPYQs(selectedValues.branch, selectedValues.semester, selectedValues.subject)
+    fetchExistingPYQs(selectedValues.branch, selectedValues.semester, selectedValues.subject, {
+      signal: controller.signal,
+    })
       .then((data) => {
-        if (isMounted) {
-          setExistingPYQs(data.uploaded || []);
-        }
+        setExistingPYQs(data.uploaded || []);
+        setLoadingExistingPYQs(false);
       })
       .catch((err) => {
+        if (err.name === "AbortError") return;
         console.warn("Failed to fetch existing PYQs for subject", err);
-        if (isMounted) setExistingPYQs([]);
-      })
-      .finally(() => {
-        if (isMounted) setLoadingExistingPYQs(false);
+        setExistingPYQs([]);
+        setLoadingExistingPYQs(false);
       });
 
-    return () => {
-      isMounted = false;
-    };
+    return () => controller.abort();
   }, [selectedValues.branch, selectedValues.semester, selectedValues.subject]);
 
   // Compute available years (exclude years where BOTH April and December are already uploaded)
@@ -305,8 +262,8 @@ export default function UploadFormPYQ({ uploadFn }) {
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      if (selectedFiles[0].size > 5 * 1024 * 1024) {
-        setErrorMessage("PDF size must be ≤ 5MB.");
+      if (selectedFiles[0].size > MAX_PDF_SIZE_MB * 1024 * 1024) {
+        setErrorMessage(`PDF size must be ≤ ${MAX_PDF_SIZE_MB}MB.`);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
@@ -431,6 +388,12 @@ export default function UploadFormPYQ({ uploadFn }) {
         finalFile = selectedValues.files[0]; // single PDF
       } else if (detectedType === "image") {
         finalFile = await createPdfFromImages(selectedValues.files); // merged PDF
+      }
+
+      if (finalFile.size > MAX_PDF_SIZE_MB * 1024 * 1024) {
+        throw new Error(
+          `The combined PDF is larger than ${MAX_PDF_SIZE_MB}MB. Please use fewer or smaller images.`
+        );
       }
 
       const finalCode = selectedValues.subject;

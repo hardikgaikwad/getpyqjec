@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import FormPYQ from "./Form";
 import DataArea from "./DataArea";
 import { fetchUrls } from "../../http";
@@ -10,22 +10,54 @@ export default function DownloadPage() {
   const [fetchedData, setFetchedData] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const abortRef = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  const releaseBlob = useCallback(() => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+  }, []);
+
+  // Cancel in-flight downloads and free the merged PDF when leaving the page.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      releaseBlob();
+    };
+  }, [releaseBlob]);
 
   const fetchFn = async (queryString) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    releaseBlob();
     setIsLoading(true);
+    setProgress(null);
     setError(null);
     setFetchedData(null);
     try {
-      const data = await fetchUrls(queryString);
+      const data = await fetchUrls(queryString, {
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
+      blobUrlRef.current = data.url;
       setFetchedData(data);
       setError(null);
       return data;
     } catch (err) {
+      if (err.name === "AbortError") return null;
       setError({ message: err.message || "Failed to fetch data" });
       setFetchedData(null);
       throw err;
     } finally {
-      setIsLoading(false);
+      if (abortRef.current === controller) {
+        setIsLoading(false);
+        setProgress(null);
+      }
     }
   };
 
@@ -33,7 +65,8 @@ export default function DownloadPage() {
     if (isLoading) return;
     setError(null);
     setFetchedData(null);
-  }, [isLoading]);
+    releaseBlob();
+  }, [isLoading, releaseBlob]);
 
   const isModalOpen = isLoading || Boolean(error) || Boolean(fetchedData);
 
@@ -74,7 +107,7 @@ export default function DownloadPage() {
           aria-modal="true"
         >
           <div className={styles.modalContainer}>
-            {isLoading && <LoadingPage />}
+            {isLoading && <LoadingPage progress={progress} />}
 
             {!isLoading && error && (
               <ErrorPage
@@ -95,4 +128,3 @@ export default function DownloadPage() {
     </div>
   );
 }
-

@@ -3,6 +3,7 @@ from .views import (
     RegisterView,
     UploadPYQView,
     DownloadPYQView,
+    DownloadLinksView,
     RequestPasswordResetView,
     ResetPasswordView,
     LoginView,
@@ -36,6 +37,7 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("upload/", UploadPYQView.as_view(), name="upload_pyq"),
     path("download/", DownloadPYQView.as_view(), name="download_pyq"),
+    path("download/links/", DownloadLinksView.as_view(), name="download_links"),
     path("auth/forgot-password/", RequestPasswordResetView.as_view(), name="request_password_reset"),
     path("auth/reset-password/<uid>/<token>/", ResetPasswordView.as_view(), name="reset_password"),
 

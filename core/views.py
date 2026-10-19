@@ -9,8 +9,10 @@ from io import BytesIO
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from utils.email_service import (
     send_password_reset_email,
     send_verification_approved_email,
@@ -31,7 +33,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from utils.pdf import compile_pdfs_from_buffers
@@ -42,7 +45,8 @@ from utils.r2_storage import (
     get_verification_storage,
 )
 
-from .curriculum import get_expected_subjects, SUBJECT_CODE_TO_NAME, get_subject_name_by_code
+from .academics import scope_filter, subject_name_map, validate_paper_identity
+from .curriculum import get_expected_subjects, SUBJECT_CODE_TO_NAME
 from .models import PYQ, StudentVerification, Subject, SubjectRequest
 from .permissions import IsAdminUser, IsVerifiedStudent
 from .serializers import (
@@ -161,66 +165,45 @@ class SubjectListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        branch_aliases = [branch]
-        if branch == "CS":
-            branch_aliases.append("CSE")
-        elif branch == "CSE":
-            branch_aliases.append("CS")
+        scope = scope_filter(branch, semester, include_input_branch=True)
 
-        if semester <= 2:
-            branch_aliases.extend(["CommonForAllBranches", "COMMONFORALLBRANCHES"])
-            sem_filter = [1, 2]
-        else:
-            sem_filter = [semester]
-
-        current_qs = Subject.objects.filter(
-            branch__in=branch_aliases,
-            semester__in=sem_filter,
-            is_current=True,
-        ).order_by("code")
-
-        past_qs = Subject.objects.filter(
-            branch__in=branch_aliases,
-            semester__in=sem_filter,
-            is_current=False,
-        ).order_by("code")
-
+        # One query for both current and past subjects; current entries win on duplicate codes.
+        rows = list(
+            Subject.objects.filter(**scope)
+            .order_by("code")
+            .values_list("code", "name", "is_current")
+        )
         seen_codes = set()
         current_subjects = []
-        for s in current_qs:
-            c = s.code.strip().upper()
-            if c not in seen_codes:
-                seen_codes.add(c)
-                current_subjects.append({"code": s.code, "name": s.name, "is_current": True})
-
         past_subjects = []
-        for s in past_qs:
-            c = s.code.strip().upper()
-            if c not in seen_codes:
-                seen_codes.add(c)
-                past_subjects.append({"code": s.code, "name": s.name, "is_current": False})
+        for want_current, target in ((True, current_subjects), (False, past_subjects)):
+            for code, name, is_current in rows:
+                c = code.strip().upper()
+                if is_current == want_current and c not in seen_codes:
+                    seen_codes.add(c)
+                    target.append({"code": code, "name": name, "is_current": is_current})
 
         # Also include any distinct subject codes from uploaded PYQs if not already present
-        existing_codes = {s["code"].upper() for s in current_subjects} | {s["code"].upper() for s in past_subjects}
-        extra_pyq_codes = (
-            PYQ.objects.filter(branch__in=branch_aliases, semester__in=sem_filter)
-            .exclude(subject_code__in=existing_codes)
+        extra_pyq_codes = sorted({
+            code.strip().upper()
+            for code in PYQ.objects.filter(**scope)
+            .exclude(subject_code__in=seen_codes)
             .values_list("subject_code", flat=True)
             .distinct()
-        )
+        } - seen_codes)
+        names = subject_name_map(extra_pyq_codes)
         for code in extra_pyq_codes:
-            clean_code = code.strip().upper()
-            if clean_code not in existing_codes:
-                existing_codes.add(clean_code)
-                name = get_subject_name_by_code(clean_code, clean_code)
-                past_subjects.append({"code": clean_code, "name": name, "is_current": False})
+            past_subjects.append({"code": code, "name": names.get(code, code), "is_current": False})
 
-        return Response({
+        response = Response({
             "branch": branch,
             "semester": semester,
             "current_subjects": current_subjects,
             "past_subjects": past_subjects,
         })
+        # Catalog changes rarely (admin approvals); a short browser cache avoids refetching.
+        response["Cache-Control"] = "public, max-age=60, stale-while-revalidate=600"
+        return response
 
 
 class SubjectRequestCreateView(APIView):
@@ -355,19 +338,32 @@ class RefreshView(APIView):
         if not refresh_token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
 
+        serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
         try:
-            refresh = RefreshToken(refresh_token)
-            access = str(refresh.access_token)
-            return Response({"access": access}, status=status.HTTP_200_OK)
-        except TokenError as e:
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, InvalidToken) as e:
             logger.warning(f"TokenError on refresh: {e}")
-            return Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+            response = Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+            _delete_refresh_cookie(response)
+            return response
+
+        response = Response({"access": serializer.validated_data["access"]}, status=status.HTTP_200_OK)
+        # ROTATE_REFRESH_TOKENS: the old refresh token is now blacklisted.
+        if "refresh" in serializer.validated_data:
+            _set_refresh_cookie(response, serializer.validated_data["refresh"])
+        return response
 
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                pass  # already expired or revoked; nothing left to invalidate
         response = Response({"message": "Logged out"}, status=status.HTTP_200_OK)
         _delete_refresh_cookie(response)
         return response
@@ -400,28 +396,10 @@ class UploadPYQView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        branch_clean = branch.strip()
-        subject_code_clean = subject_code.strip().upper()
-
-        is_common_sem = (semester <= 2) or (branch_clean.upper() in ("COMMONFORALLBRANCHES", "COMMON FOR ALL BRANCHES"))
-        if is_common_sem:
-            query_filter = {
-                "branch__in": ["CommonForAllBranches", "COMMONFORALLBRANCHES"],
-                "semester__in": [1, 2],
-                "subject_code": subject_code_clean,
-            }
-        else:
-            branch_aliases = [branch_clean]
-            if branch_clean.upper() == "CS":
-                branch_aliases.append("CSE")
-            elif branch_clean.upper() == "CSE":
-                branch_aliases.append("CS")
-
-            query_filter = {
-                "branch__in": branch_aliases,
-                "semester": semester,
-                "subject_code": subject_code_clean,
-            }
+        query_filter = {
+            **scope_filter(branch, semester),
+            "subject_code": subject_code.strip().upper(),
+        }
 
         pyqs = (
             PYQ.objects.filter(**query_filter)
@@ -469,47 +447,41 @@ class UploadPYQView(APIView):
             )
 
         try:
-            branch = branch.strip().upper()
-            semester = int(semester)
-            subject_code = subject_code.strip().upper()
-            year = int(year)
-            exam_session = exam_session.strip().capitalize()
-            if exam_session not in ("April", "December"):
-                raise ValueError("Exam session must be 'April' or 'December'")
-        except Exception as e:
+            paper = validate_paper_identity(branch, semester, subject_code, year, exam_session)
+        except ValueError as e:
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        branch = paper["branch"]
+        semester = paper["semester"]
+        subject_code = paper["subject_code"]
 
-        is_common_sem = (semester <= 2) or (branch in ("COMMONFORALLBRANCHES", "COMMON FOR ALL BRANCHES"))
-        if is_common_sem:
-            branch = "COMMONFORALLBRANCHES"
-            duplicate_filter = {
-                "branch__in": ["CommonForAllBranches", "COMMONFORALLBRANCHES"],
-                "semester__in": [1, 2],
-                "subject_code": subject_code,
-                "year": year,
-                "exam_session": exam_session,
-            }
-        else:
-            branch_aliases = [branch]
-            if branch == "CS":
-                branch_aliases.append("CSE")
-            elif branch == "CSE":
-                branch_aliases.append("CS")
-            duplicate_filter = {
-                "branch__in": branch_aliases,
-                "semester": semester,
-                "subject_code": subject_code,
-                "year": year,
-                "exam_session": exam_session,
-            }
-
+        duplicate_filter = {
+            **scope_filter(branch, semester),
+            "subject_code": subject_code,
+            "year": paper["year"],
+            "exam_session": paper["exam_session"],
+        }
         if PYQ.objects.filter(**duplicate_filter).exists():
             return Response(
                 {"error": "PYQ already exists for this subject/year/session"},
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        # Only subjects already in the catalog may receive uploads; new subjects go
+        # through the admin-reviewed SubjectRequest flow. The client-sent name is ignored.
+        scope = scope_filter(branch, semester, include_input_branch=True)
+        subj = Subject.objects.filter(**scope, code=subject_code).first()
+        in_catalog = (
+            subj is not None
+            or subject_code in SUBJECT_CODE_TO_NAME
+            or PYQ.objects.filter(**scope_filter(branch, semester), subject_code=subject_code).exists()
+        )
+        if not in_catalog:
+            return Response(
+                {"error": "This subject is not in the catalog yet. Please request it using 'Add unlisted subjects'."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate PDF magic header
@@ -539,51 +511,43 @@ class UploadPYQView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Resolve or auto-register Subject
-        branch_aliases = [branch]
-        if branch == "CS":
-            branch_aliases.append("CSE")
-        elif branch == "CSE":
-            branch_aliases.append("CS")
-        if is_common_sem:
-            branch_aliases.extend(["CommonForAllBranches", "COMMONFORALLBRANCHES"])
-
-        subj = Subject.objects.filter(
-            branch__in=branch_aliases,
-            semester__in=[1, 2] if is_common_sem else [semester],
-            code=subject_code,
-        ).first()
-
-        if not subj:
-            custom_name = request.POST.get("subject_name", "").strip() or get_subject_name_by_code(subject_code, subject_code)
-            subj, _ = Subject.objects.get_or_create(
-                branch=branch,
-                semester=semester,
-                code=subject_code,
-                name=custom_name,
-                defaults={"is_current": False},
-            )
-
-        # Save metadata to database with cleanup on failure
+        # Save metadata; the unique constraint is the final word on duplicates, so a
+        # concurrent upload of the same paper ends in a 409 rather than a second row.
         try:
-            pyq = PYQ.objects.create(
-                subject=subj,
-                branch=branch,
-                semester=semester,
-                subject_code=subject_code,
-                year=year,
-                exam_session=exam_session,
-                r2_object_key=object_key,
-                file_hash=file_hash,
-                uploaded_by=request.user,
-            )
+            with transaction.atomic():
+                if subj is None and subject_code in SUBJECT_CODE_TO_NAME:
+                    subj, _ = Subject.objects.get_or_create(
+                        branch=branch,
+                        semester=semester,
+                        code=subject_code,
+                        name=SUBJECT_CODE_TO_NAME[subject_code],
+                        defaults={"is_current": False},
+                    )
+                pyq = PYQ.objects.create(
+                    subject=subj,
+                    branch=branch,
+                    semester=semester,
+                    subject_code=subject_code,
+                    year=paper["year"],
+                    exam_session=paper["exam_session"],
+                    r2_object_key=object_key,
+                    file_hash=file_hash,
+                    uploaded_by=request.user,
+                )
         except Exception as db_err:
-            logger.error(f"Database error saving PYQ: {db_err}. Cleaning up R2 object {object_key}.")
+            is_duplicate = isinstance(db_err, IntegrityError)
+            if not is_duplicate:
+                logger.error(f"Database error saving PYQ: {db_err}. Cleaning up R2 object {object_key}.")
             try:
                 storage.delete_object(object_key)
-            except Exception as cleanup_err:
+            except R2StorageError as cleanup_err:
                 logger.error(f"Failed to cleanup orphaned R2 object {object_key}: {cleanup_err}")
 
+            if is_duplicate:
+                return Response(
+                    {"error": "PYQ already exists for this subject/year/session"},
+                    status=status.HTTP_409_CONFLICT,
+                )
             return Response(
                 {"error": "Failed to save PYQ record in database."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -595,101 +559,205 @@ class UploadPYQView(APIView):
         )
 
 
-# ─── PYQ Download (R2 presigned URLs) ────────────────────────────────────────
+# ─── PYQ Download ────────────────────────────────────────────────────────────
 
-class DownloadPYQView(APIView):
+# Presigned links are generated right before the browser fetches them.
+PRESIGNED_PYQ_URL_EXPIRY = 600
+# The legacy server-side merge holds a worker and RAM for every file; keep it bounded.
+LEGACY_DOWNLOAD_MAX_FILES = 40
+
+
+def _parse_download_query(params):
+    """Validate the download query. Returns (query, None) or (None, error response)."""
+    branch = params.get("branch")
+    semester = params.get("semester")
+    subject_code = params.get("subject_code", "all")
+    from_year = params.get("from_year")
+    to_year = params.get("to_year")
+
+    if not all([branch, semester, from_year, to_year]):
+        return None, JsonResponse(
+            {"error": "Missing required parameters"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        semester = int(semester)
+        from_year = int(from_year)
+        to_year = int(to_year)
+    except ValueError:
+        return None, JsonResponse(
+            {"error": "Invalid year or semester"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if from_year > to_year:
+        return None, JsonResponse(
+            {"error": "from_year cannot be greater than to_year"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    is_all_subjects = subject_code.lower() == "all"
+    return {
+        "branch": branch,
+        "semester": semester,
+        "subject_code": subject_code,
+        "from_year": from_year,
+        "to_year": to_year,
+        "is_all_subjects": is_all_subjects,
+        "expected_subjects": get_expected_subjects(branch, semester) if is_all_subjects else [],
+    }, None
+
+
+def _select_pyqs(query):
+    """Matching PYQs ordered by subject/year/session, one per (subject, year, session)."""
+    queryset = (
+        PYQ.objects.filter(
+            **scope_filter(query["branch"], query["semester"]),
+            year__gte=query["from_year"],
+            year__lte=query["to_year"],
+        )
+        .exclude(r2_object_key="")
+        .filter(r2_object_key__isnull=False)
+    )
+    if not query["is_all_subjects"]:
+        queryset = queryset.filter(subject_code=query["subject_code"].upper())
+
+    raw_pyqs = queryset.only("id", "r2_object_key", "year", "subject_code", "exam_session").order_by(
+        "subject_code", "year", "exam_session"
+    )
+
+    # Deduplicate if duplicate records exist across sem 1 and sem 2 (or CS/CSE)
+    seen_keys = set()
+    pyqs = []
+    for p in raw_pyqs:
+        key = (p.subject_code.upper(), p.year, p.exam_session.lower())
+        if key not in seen_keys:
+            seen_keys.add(key)
+            pyqs.append(p)
+    return pyqs
+
+
+def _missing_info(query, found_pyqs):
+    """Years with no paper, and (for "all subjects") the missing subjects per year."""
+    all_years = set(range(query["from_year"], query["to_year"] + 1))
+    found_years = {p.year for p in found_pyqs}
+    found_pairs = {(p.year, p.subject_code.upper()) for p in found_pyqs}
+
+    missing_details = {}
+    if query["is_all_subjects"] and query["expected_subjects"]:
+        for y in sorted(all_years):
+            missing_for_year = [
+                {"name": s_name, "code": s_code}
+                for s_name, s_code in query["expected_subjects"]
+                if (y, s_code.upper()) not in found_pairs
+            ]
+            if missing_for_year:
+                missing_details[str(y)] = missing_for_year
+    return sorted(all_years - found_years), missing_details
+
+
+def _pyq_missing_response(query):
+    missing_years, missing_details = _missing_info(query, [])
+    return JsonResponse(
+        {
+            "error": "PYQ missing",
+            "missing_years": missing_years,
+            "missing_details": missing_details,
+        },
+        status=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def _bundle_filename(query):
+    return (
+        f"{query['branch'].upper()}_sem{query['semester']}_{query['subject_code'].upper()}_"
+        f"{query['from_year']}-{query['to_year']}.pdf"
+    )
+
+
+class DownloadLinksView(APIView):
+    """
+    GET /download/links/?branch=&semester=&subject_code=&from_year=&to_year=
+
+    Same query as /download/, but instead of merging on the server it returns
+    short-lived presigned R2 URLs. The browser downloads the files directly from
+    R2 and merges them itself, so file bytes never pass through this server.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
-        branch = request.GET.get("branch")
-        semester = request.GET.get("semester")
-        subject_code = request.GET.get("subject_code", "all")
-        from_year = request.GET.get("from_year")
-        to_year = request.GET.get("to_year")
+        query, error = _parse_download_query(request.GET)
+        if error:
+            return error
 
-        if not all([branch, semester, from_year, to_year]):
-            return JsonResponse(
-                {"error": "Missing required parameters"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        pyqs = _select_pyqs(query)
+        if not pyqs:
+            return _pyq_missing_response(query)
+
+        names = {code.upper(): name for name, code in query["expected_subjects"]}
+        unknown_codes = {p.subject_code.upper() for p in pyqs} - set(names)
+        if unknown_codes:
+            names.update(subject_name_map(unknown_codes))
 
         try:
-            semester = int(semester)
-            from_year = int(from_year)
-            to_year = int(to_year)
-        except ValueError:
-            return JsonResponse(
-                {"error": "Invalid year or semester"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if from_year > to_year:
-            return JsonResponse(
-                {"error": "from_year cannot be greater than to_year"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        is_common_sem = (semester <= 2) or (branch.upper() in ("COMMONFORALLBRANCHES", "COMMON FOR ALL BRANCHES"))
-        if is_common_sem:
-            base_filter = {
-                "branch__in": ["CommonForAllBranches", "COMMONFORALLBRANCHES"],
-                "semester__in": [1, 2],
-                "year__gte": from_year,
-                "year__lte": to_year,
-            }
-        else:
-            base_filter = {
-                "branch": branch.upper(),
-                "semester": semester,
-                "year__gte": from_year,
-                "year__lte": to_year,
-            }
-
-        # Query database for matching PYQs
-        queryset = (
-            PYQ.objects.filter(**base_filter)
-            .exclude(r2_object_key="")
-            .filter(r2_object_key__isnull=False)
-        )
-
-        if subject_code.lower() != "all":
-            queryset = queryset.filter(subject_code=subject_code.upper())
-
-        raw_pyqs = list(
-            queryset.only("id", "r2_object_key", "year", "subject_code", "exam_session")
-            .order_by("subject_code", "year", "exam_session")
-        )
-
-        # Deduplicate if duplicate records exist across sem 1 and sem 2
-        seen_keys = set()
-        pyqs = []
-        for p in raw_pyqs:
-            key = (p.subject_code.upper(), p.year, p.exam_session.lower())
-            if key not in seen_keys:
-                seen_keys.add(key)
-                pyqs.append(p)
-
-        all_years = set(range(from_year, to_year + 1))
-        is_all_subjects = subject_code.lower() == "all"
-        expected_subjects = get_expected_subjects(branch, semester) if is_all_subjects else []
-
-        if not pyqs:
-            missing_details = {}
-            if is_all_subjects and expected_subjects:
-                for y in range(from_year, to_year + 1):
-                    missing_details[str(y)] = [
-                        {"name": s_name, "code": s_code} for s_name, s_code in expected_subjects
-                    ]
-            return JsonResponse(
+            storage = get_pyq_storage()
+            papers = [
                 {
-                    "error": "PYQ missing",
-                    "missing_years": sorted(all_years),
-                    "missing_details": missing_details,
-                },
-                status=status.HTTP_404_NOT_FOUND,
+                    "id": p.id,
+                    "url": storage.generate_presigned_download_url(
+                        p.r2_object_key, expiry=PRESIGNED_PYQ_URL_EXPIRY
+                    ),
+                    "subject_code": p.subject_code.upper(),
+                    "subject_name": names.get(p.subject_code.upper(), p.subject_code.upper()),
+                    "year": p.year,
+                    "exam_session": p.exam_session,
+                }
+                for p in pyqs
+            ]
+        except R2StorageError as e:
+            logger.error(f"Failed to generate presigned PYQ URLs: {e}")
+            return JsonResponse(
+                {"error": "Failed to prepare download links. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        missing_years, missing_details = _missing_info(query, pyqs)
+        response = JsonResponse({
+            "filename": _bundle_filename(query),
+            "is_all_subjects": query["is_all_subjects"],
+            "papers": papers,
+            "missing_years": missing_years,
+            "missing_details": missing_details,
+        })
+        # Links expire; never let a shared cache hand them to someone later.
+        response["Cache-Control"] = "private, max-age=60"
+        return response
 
+
+class DownloadPYQView(APIView):
+    """
+    GET /download/ — legacy server-side merge, kept for clients still running the
+    previous frontend build. Superseded by /download/links/; remove once logs show
+    no more traffic here.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query, error = _parse_download_query(request.GET)
+        if error:
+            return error
+
+        logger.info("Legacy /download/ endpoint used")
+        pyqs = _select_pyqs(query)
+        if not pyqs:
+            return _pyq_missing_response(query)
+
+        if len(pyqs) > LEGACY_DOWNLOAD_MAX_FILES:
+            return JsonResponse(
+                {"error": "Too many papers selected. Please refresh the page and try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Download PDFs from R2 and merge
         try:
@@ -697,25 +765,17 @@ class DownloadPYQView(APIView):
 
             def _download(pyq):
                 try:
-                    buf = storage.download_object(pyq.r2_object_key)
-                    return (pyq, buf, None)
+                    return (pyq, storage.download_object(pyq.r2_object_key))
                 except R2NoSuchKeyError as e:
                     logger.warning(
                         f"R2 object missing for PYQ id={pyq.id}, key='{pyq.r2_object_key}': {e}"
                     )
-                    return (pyq, None, "missing")
-                except Exception as e:
-                    err_str = str(e).lower()
-                    if "nosuchkey" in err_str or "not exist" in err_str or "404" in err_str:
-                        logger.warning(
-                            f"R2 object missing for PYQ id={pyq.id}, key='{pyq.r2_object_key}': {e}"
-                        )
-                        return (pyq, None, "missing")
+                except R2StorageError as e:
                     logger.error(
                         f"Failed to download PYQ id={pyq.id}, key='{pyq.r2_object_key}': {e}",
                         exc_info=True,
                     )
-                    return (pyq, None, "error")
+                return (pyq, None)
 
             max_workers = min(len(pyqs), 5)
             if max_workers > 1:
@@ -724,82 +784,34 @@ class DownloadPYQView(APIView):
             else:
                 download_results = [_download(pyqs[0])]
 
-            valid_buffers = []
-            successful_pyqs = []
-            for pyq, buf, status_flag in download_results:
-                if buf is not None:
-                    valid_buffers.append(buf)
-                    successful_pyqs.append(pyq)
-
-            # If all requested PYQs were missing in R2 or failed to download
-            if not valid_buffers:
+            successful = [(pyq, buf) for pyq, buf in download_results if buf is not None]
+            if not successful:
                 logger.warning(
-                    f"No PYQ files could be retrieved from R2 for branch={branch}, "
-                    f"semester={semester}, subject_code={subject_code}, "
-                    f"years={from_year}-{to_year}"
+                    f"No PYQ files could be retrieved from R2 for branch={query['branch']}, "
+                    f"semester={query['semester']}, subject_code={query['subject_code']}, "
+                    f"years={query['from_year']}-{query['to_year']}"
                 )
-                missing_details = {}
-                if is_all_subjects and expected_subjects:
-                    for y in range(from_year, to_year + 1):
-                        missing_details[str(y)] = [
-                            {"name": s_name, "code": s_code} for s_name, s_code in expected_subjects
-                        ]
-                return JsonResponse(
-                    {
-                        "error": "PYQ missing",
-                        "missing_years": sorted(all_years),
-                        "missing_details": missing_details,
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+                return _pyq_missing_response(query)
 
-            merged_pdf = compile_pdfs_from_buffers(valid_buffers)
+            merged_pdf = compile_pdfs_from_buffers([buf for _, buf in successful])
         except Exception as e:
-            err_str = str(e).lower()
-            if "nosuchkey" in err_str or "not exist" in err_str or "404" in err_str:
-                return JsonResponse(
-                    {
-                        "error": "PYQ missing",
-                        "missing_years": sorted(all_years),
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
             logger.error(f"Download/Merge failed: {e}", exc_info=True)
             return JsonResponse(
                 {"error": "Failed to merge PDF files. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Calculate missing years & details (years not in DB + years missing in R2)
-        found_years = {p.year for p in successful_pyqs}
-        found_pairs = {(p.year, p.subject_code.upper()) for p in successful_pyqs}
-
-        missing_details = {}
-        if is_all_subjects and expected_subjects:
-            for y in range(from_year, to_year + 1):
-                missing_for_year = []
-                for s_name, s_code in expected_subjects:
-                    if (y, s_code.upper()) not in found_pairs:
-                        missing_for_year.append({"name": s_name, "code": s_code})
-                if missing_for_year:
-                    missing_details[str(y)] = missing_for_year
-            missing_years = sorted(all_years - found_years)
-        else:
-            missing_years = sorted(all_years - found_years)
-
-        filename = f"{branch.upper()}_sem{semester}_{subject_code.upper()}_{from_year}-{to_year}.pdf"
+        missing_years, missing_details = _missing_info(query, [pyq for pyq, _ in successful])
         response = FileResponse(
             merged_pdf,
             as_attachment=True,
-            filename=filename,
+            filename=_bundle_filename(query),
             content_type="application/pdf",
         )
-
         if missing_years:
             response["X-missing_years"] = ",".join(str(y) for y in missing_years)
         if missing_details:
             response["X-missing_details"] = urllib.parse.quote(json.dumps(missing_details))
-
         return response
 
 
@@ -818,14 +830,18 @@ class RequestPasswordResetView(APIView):
 
         email = str(email).strip()
 
+        generic_response = Response(
+            {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
+            status=status.HTTP_200_OK,
+        )
+
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            logger.warning(f"Password reset requested for unregistered email: {email}")
-            return Response(
-                {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
-                status=status.HTTP_200_OK,
-            )
+            # Log a short hash only: no plain-text email addresses in logs.
+            email_hash = hashlib.sha256(email.lower().encode()).hexdigest()[:12]
+            logger.info(f"Password reset requested for unregistered email (sha256:{email_hash})")
+            return generic_response
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = token_generator.make_token(user)
@@ -839,18 +855,13 @@ class RequestPasswordResetView(APIView):
                 user_email=user.email,
                 reset_link=reset_link,
             )
-            logger.info(f"Password reset email sent to {user.email}")
+            logger.info(f"Password reset email sent to user id={user.pk}")
         except Exception as e:
-            logger.error(f"Failed to send password reset email to {user.email}: {e.__class__.__name__}")
-            return Response(
-                {"error": "Failed to send password reset email. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            # Same response as the success path, so the endpoint doesn't reveal
+            # which emails have accounts; the failure is still logged.
+            logger.error(f"Failed to send password reset email to user id={user.pk}: {e.__class__.__name__}")
 
-        return Response(
-            {"message": "If an account exists with this email, a reset link has been sent. The link is valid for 5 minutes only."},
-            status=status.HTTP_200_OK,
-        )
+        return generic_response
 
 
 class ResetPasswordView(APIView):
@@ -869,6 +880,11 @@ class ResetPasswordView(APIView):
         new_password = request.data.get("password")
         if not new_password:
             return Response({"error": "Password required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({"error": " ".join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(new_password)
         user.save()
@@ -1076,8 +1092,14 @@ class VerificationListView(APIView):
         queryset = queryset.order_by('-submitted_at')
 
         # Pagination
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('page_size', 20))
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+        except ValueError:
+            page = 1
+        try:
+            page_size = max(1, min(100, int(request.GET.get('page_size', 20))))
+        except ValueError:
+            page_size = 20
         total = queryset.count()
         start = (page - 1) * page_size
         end = start + page_size
@@ -1296,7 +1318,7 @@ class PYQUploadHistoryView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        queryset = PYQ.objects.select_related('uploaded_by').all()
+        queryset = PYQ.objects.select_related('uploaded_by', 'subject').all()
 
         # Filtering
         branch = request.GET.get('branch', '').strip()
@@ -1570,4 +1592,4 @@ class AdminSubjectRequestRejectView(APIView):
             "message": f"Subject request for '{subject_req.code}' was rejected.",
             "status": "rejected",
             "reason": reason,
-        })
+        })

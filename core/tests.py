@@ -1138,11 +1138,10 @@ class EmailServiceTests(TestCase):
         )
         with self.settings(RESEND_API_KEY="re_test_key_mock"):
             res = client.post("/auth/forgot-password/", {"email": user.email}, format="json")
-            self.assertEqual(res.status_code, 500)
-            self.assertEqual(
-                res.json(),
-                {"error": "Failed to send password reset email. Please try again later."},
-            )
+            # Same response as for unknown emails, so account existence isn't revealed.
+            unknown = client.post("/auth/forgot-password/", {"email": "nobody@gmail.com"}, format="json")
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json(), unknown.json())
 
     @patch("resend.Emails.send")
     def test_admin_subject_request_approve_sends_email(self, mock_send):
@@ -1325,3 +1324,376 @@ class Semester1And2CommonTests(TestCase):
 
 
 
+
+
+class ServerTimingMiddlewareTests(TestCase):
+    def test_server_timing_header_present(self):
+        res = self.client.get("/health/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("Server-Timing", res)
+        self.assertIn("total;dur=", res["Server-Timing"])
+        self.assertIn("db;dur=", res["Server-Timing"])
+
+
+class DuplicateRuleCharacterizationTests(TestCase):
+    """Pins down the current duplicate rule: CS/CSE are aliases, sem 1/2 are one group."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201CS231046",
+            email="dup@jecjabalpur.ac.in",
+            name="Dup User",
+            password="testpassword",
+        )
+        StudentVerification.objects.create(user=self.user, status="verified")
+        self.client.force_authenticate(user=self.user)
+        self.pdf_bytes = _create_minimal_pdf_bytes()
+
+    def _upload(self, branch, semester, code):
+        pdf_file = SimpleUploadedFile("sample.pdf", self.pdf_bytes, content_type="application/pdf")
+        return self.client.post(
+            "/upload/",
+            {
+                "branch": branch,
+                "semester": str(semester),
+                "subject_code": code,
+                "year": "2023",
+                "exam_session": "April",
+                "file": pdf_file,
+            },
+            format="multipart",
+        )
+
+    @patch("core.views.get_pyq_storage")
+    def test_cs_upload_blocked_when_cse_paper_exists(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        PYQ.objects.create(
+            branch="CSE", semester=4, subject_code="CS42", year=2023,
+            exam_session="April", r2_object_key="pyqs/CSE/x.pdf", uploaded_by=self.user,
+        )
+        res = self._upload("CS", 4, "CS42")
+        self.assertEqual(res.status_code, 409)
+
+    @patch("core.views.get_pyq_storage")
+    def test_existing_check_lists_cross_semester_common_paper(self, mock_get_storage):
+        PYQ.objects.create(
+            branch="COMMONFORALLBRANCHES", semester=1, subject_code="BT11", year=2023,
+            exam_session="April", r2_object_key="pyqs/COMMONFORALLBRANCHES/x.pdf", uploaded_by=self.user,
+        )
+        res = self.client.get("/upload/?branch=CommonForAllBranches&semester=2&subject_code=BT11")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["uploaded"], [{"year": 2023, "session": "April", "exam_session": "April"}])
+
+
+class SecurityConfigTests(TestCase):
+    def test_cors_rejects_foreign_vercel_origin(self):
+        res = self.client.options(
+            "/auth/refresh/",
+            HTTP_ORIGIN="https://evil-site.vercel.app",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        )
+        self.assertNotIn("Access-Control-Allow-Origin", res)
+
+    def test_cors_allows_first_party_origin(self):
+        res = self.client.options(
+            "/auth/refresh/",
+            HTTP_ORIGIN="https://www.getpyqjec.in",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        )
+        self.assertEqual(res.get("Access-Control-Allow-Origin"), "https://www.getpyqjec.in")
+
+    def test_register_rejects_weak_password(self):
+        res = APIClient().post("/auth/register/", {
+            "rno": "0201CS231002",
+            "email": "weak@gmail.com",
+            "name": "Weak Password",
+            "password": "12345678",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("password", res.data)
+        self.assertFalse(User.objects.filter(rno="0201CS231002").exists())
+
+    def test_reset_rejects_weak_password(self):
+        user = User.objects.create_user(
+            rno="0201CS231003", email="reset@gmail.com", name="Reset", password="strongpassword"
+        )
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = PasswordResetTokenGenerator().make_token(user)
+        res = APIClient().post(f"/auth/reset-password/{uid}/{token}/", {"password": "password"}, format="json")
+        self.assertEqual(res.status_code, 400)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("strongpassword"))
+
+    @patch("utils.r2_storage.is_r2_configured", return_value=False)
+    def test_storage_refuses_local_fallback_in_production(self, _mock):
+        import utils.r2_storage as r2
+        with patch.object(r2, "_pyq_storage", None), patch.object(r2.sys, "argv", ["gunicorn"]), \
+                self.settings(DEBUG=False, FORCE_LOCAL_STORAGE=False):
+            with self.assertRaises(R2StorageError):
+                r2.get_pyq_storage()
+
+
+class DownloadLinksTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201IT231046", email="links@gmail.com", name="Uploader", password="password123",
+        )
+        for year, session in ((2022, "December"), (2024, "April")):
+            PYQ.objects.create(
+                branch="IT", semester=5, subject_code="IT51", year=year, exam_session=session,
+                r2_object_key=f"pyqs/IT/{year}.pdf", uploaded_by=self.user,
+            )
+
+    def _mock_storage(self, mock_get_storage):
+        storage = MagicMock()
+        storage.generate_presigned_download_url.side_effect = lambda key, expiry=None: f"https://r2.test/{key}"
+        mock_get_storage.return_value = storage
+        return storage
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_single_subject(self, mock_get_storage):
+        storage = self._mock_storage(mock_get_storage)
+        res = self.client.get("/download/links/?branch=IT&semester=5&subject_code=IT51&from_year=2022&to_year=2024")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["filename"], "IT_sem5_IT51_2022-2024.pdf")
+        self.assertEqual([p["year"] for p in data["papers"]], [2022, 2024])
+        self.assertEqual(data["papers"][0]["url"], "https://r2.test/pyqs/IT/2022.pdf")
+        self.assertEqual(data["missing_years"], [2023])
+        self.assertEqual(data["missing_details"], {})
+        # Listing must never pull file bytes through the server.
+        storage.download_object.assert_not_called()
+        self.assertIn("private", res["Cache-Control"])
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_all_subjects_missing_details(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        res = self.client.get("/download/links/?branch=IT&semester=5&subject_code=all&from_year=2022&to_year=2023")
+        data = res.json()
+        self.assertTrue(data["is_all_subjects"])
+        self.assertNotIn("IT51", [s["code"] for s in data["missing_details"]["2022"]])
+        self.assertEqual(len(data["missing_details"]["2023"]), 5)
+        self.assertTrue(data["papers"][0]["subject_name"])
+
+    def test_links_none_found(self):
+        res = self.client.get("/download/links/?branch=CSE&semester=3&subject_code=CS31&from_year=2020&to_year=2021")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.json()["missing_years"], [2020, 2021])
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_cs_alias_finds_cse_papers(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        PYQ.objects.create(
+            branch="CSE", semester=4, subject_code="CS42", year=2023, exam_session="April",
+            r2_object_key="pyqs/CSE/a.pdf", uploaded_by=self.user,
+        )
+        res = self.client.get("/download/links/?branch=CS&semester=4&subject_code=CS42&from_year=2023&to_year=2023")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()["papers"]), 1)
+
+    @patch("core.views.get_pyq_storage")
+    def test_links_query_count(self, mock_get_storage):
+        self._mock_storage(mock_get_storage)
+        # 1 query for the papers + 1 for subject display names; no R2 round trips.
+        with self.assertNumQueries(2):
+            self.client.get("/download/links/?branch=IT&semester=5&subject_code=IT51&from_year=2022&to_year=2024")
+
+    def test_links_missing_params(self):
+        res = self.client.get("/download/links/?branch=IT")
+        self.assertEqual(res.status_code, 400)
+
+
+class SubjectListQueryTests(TestCase):
+    def test_subjects_query_count_and_extra_codes(self):
+        user = User.objects.create_user(rno="0201IT231047", email="q@gmail.com", name="Q", password="password123")
+        PYQ.objects.create(
+            branch="IT", semester=5, subject_code="ZZ99", year=2023, exam_session="April",
+            r2_object_key="k", uploaded_by=user,
+        )
+        with self.assertNumQueries(3):
+            res = self.client.get("/subjects/?branch=IT&semester=5")
+        past_codes = [s["code"] for s in res.json()["past_subjects"]]
+        self.assertIn("ZZ99", past_codes)
+        self.assertIn("max-age=60", res["Cache-Control"])
+
+
+class UploadIntegrityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201CS231050", email="integrity@gmail.com", name="Integrity", password="testpassword",
+        )
+        StudentVerification.objects.create(user=self.user, status="verified")
+        self.client.force_authenticate(user=self.user)
+        self.pdf_bytes = _create_minimal_pdf_bytes()
+
+    def _upload(self, **overrides):
+        data = {
+            "branch": "CSE", "semester": "4", "subject_code": "CS42",
+            "year": "2023", "exam_session": "April",
+            "file": SimpleUploadedFile("p.pdf", self.pdf_bytes, content_type="application/pdf"),
+        }
+        data.update(overrides)
+        return self.client.post("/upload/", data, format="multipart")
+
+    @patch("core.views.get_pyq_storage")
+    def test_cs_upload_is_stored_as_cse(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        res = self._upload(branch="CS")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(PYQ.objects.get(id=res.data["id"]).branch, "CSE")
+
+    @patch("core.views.get_pyq_storage")
+    def test_unknown_subject_code_rejected_without_creating_subject(self, mock_get_storage):
+        storage = MagicMock()
+        mock_get_storage.return_value = storage
+        res = self._upload(subject_code="ZZ999", subject_name="Made Up Subject")
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Subject.objects.filter(code="ZZ999").exists())
+        storage.upload_object.assert_not_called()
+
+    @patch("core.views.get_pyq_storage")
+    def test_client_subject_name_is_ignored(self, mock_get_storage):
+        mock_get_storage.return_value = MagicMock()
+        res = self._upload(subject_name="Hacked Name")
+        self.assertEqual(res.status_code, 201)
+        self.assertFalse(Subject.objects.filter(name="Hacked Name").exists())
+
+    def test_invalid_fields_rejected(self):
+        for overrides in (
+            {"branch": "../../etc"},
+            {"semester": "9"},
+            {"year": "1990"},
+            {"exam_session": "June"},
+            {"subject_code": "CS 42/../x"},
+        ):
+            with self.subTest(**overrides):
+                self.assertEqual(self._upload(**overrides).status_code, 400)
+
+    @patch("core.views.get_pyq_storage")
+    def test_concurrent_duplicate_returns_409_and_cleans_up(self, mock_get_storage):
+        from django.db import IntegrityError
+        storage = MagicMock()
+        mock_get_storage.return_value = storage
+        # Simulate another request inserting the same paper between the check and the insert.
+        with patch("core.views.PYQ.objects.create", side_effect=IntegrityError("duplicate")):
+            res = self._upload()
+        self.assertEqual(res.status_code, 409)
+        storage.delete_object.assert_called_once()
+
+    def test_db_constraint_blocks_common_semester_duplicate(self):
+        from django.db import IntegrityError, transaction
+        PYQ.objects.create(
+            branch="COMMONFORALLBRANCHES", semester=1, subject_code="BT11", year=2023,
+            exam_session="April", r2_object_key="a",
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PYQ.objects.create(
+                branch="COMMONFORALLBRANCHES", semester=2, subject_code="BT11", year=2023,
+                exam_session="April", r2_object_key="b",
+            )
+
+
+class CanonicalizeMigrationTests(TestCase):
+    def _run(self):
+        import importlib
+        from django.apps import apps as global_apps
+        migration = importlib.import_module("core.migrations.0011_pyq_canonical_unique_paper")
+        migration.canonicalize_pyq_branches(global_apps, None)
+
+    def test_rewrites_cs_and_common_branches(self):
+        cs = PYQ.objects.create(branch="CS", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="a")
+        common = PYQ.objects.create(branch="CommonForAllBranches", semester=2, subject_code="BT21", year=2022, exam_session="April", r2_object_key="b")
+        self._run()
+        cs.refresh_from_db()
+        common.refresh_from_db()
+        self.assertEqual(cs.branch, "CSE")
+        self.assertEqual(common.branch, "COMMONFORALLBRANCHES")
+
+    def test_aborts_on_conflicting_rows(self):
+        PYQ.objects.create(branch="CS", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="a")
+        PYQ.objects.create(branch="CSE", semester=4, subject_code="CS42", year=2022, exam_session="April", r2_object_key="b")
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.assertTrue(PYQ.objects.filter(branch="CS").exists())
+
+
+class SeedDevDataTests(TestCase):
+    def test_seed_twice_creates_no_duplicate_papers(self):
+        import tempfile
+        from django.core.management import call_command
+        from utils.r2_storage import LocalStorageService
+
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root), \
+                patch("core.management.commands.seed_dev_data.get_pyq_storage",
+                      side_effect=lambda: LocalStorageService("pyqs")), \
+                patch("core.management.commands.seed_dev_data.get_verification_storage",
+                      side_effect=lambda: LocalStorageService("verifications")):
+            call_command("seed_dev_data", stdout=io.StringIO())
+            first_count = PYQ.objects.count()
+            call_command("seed_dev_data", stdout=io.StringIO())
+        self.assertGreater(first_count, 0)
+        self.assertEqual(PYQ.objects.count(), first_count)
+
+
+class AdminListEfficiencyTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            rno="0201IT231099", email="admin99@gmail.com", name="Admin", password="password123", role="admin",
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_upload_history_query_count_does_not_grow_with_rows(self):
+        subj = Subject.objects.filter(code="IT61").first()
+        for year in range(2010, 2025):
+            PYQ.objects.create(
+                subject=subj, branch="IT", semester=6, subject_code="IT61", year=year,
+                exam_session="April", r2_object_key=f"k{year}", uploaded_by=self.admin,
+            )
+        # count + page (with uploaded_by and subject joined); no per-row subject lookups
+        with self.assertNumQueries(2):
+            res = self.client.get("/admin-api/pyqs/history/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["results"]), 15)
+        self.assertEqual(res.data["results"][0]["subject_name"], subj.name)
+
+    def test_verification_list_tolerates_bad_paging(self):
+        res = self.client.get("/admin-api/verifications/?page=abc&page_size=100000")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["page"], 1)
+        self.assertEqual(res.data["page_size"], 100)
+
+
+class RefreshRotationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            rno="0201IT231077", email="rotate@gmail.com", name="Rotate", password="strongpassword",
+        )
+
+    def test_refresh_rotates_and_old_token_is_rejected(self):
+        old = str(RefreshToken.for_user(self.user))
+        self.client.cookies["refresh_token"] = old
+        res = self.client.post("/auth/refresh/")
+        self.assertEqual(res.status_code, 200)
+        new = res.cookies["refresh_token"].value
+        self.assertNotEqual(new, old)
+
+        reuse = APIClient()
+        reuse.cookies["refresh_token"] = old
+        self.assertEqual(reuse.post("/auth/refresh/").status_code, 401)
+
+        self.client.cookies["refresh_token"] = new
+        self.assertEqual(self.client.post("/auth/refresh/").status_code, 200)
+
+    def test_logout_revokes_refresh_token(self):
+        token = str(RefreshToken.for_user(self.user))
+        self.client.cookies["refresh_token"] = token
+        self.assertEqual(self.client.post("/auth/logout/").status_code, 200)
+
+        again = APIClient()
+        again.cookies["refresh_token"] = token
+        self.assertEqual(again.post("/auth/refresh/").status_code, 401)

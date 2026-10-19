@@ -16,11 +16,12 @@ import os
 import sys
 from dotenv import load_dotenv
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv(BASE_DIR / '.env', override=True)
+load_dotenv(BASE_DIR / '.env', override=False)
 
 # ==============================================================================
 # Contributor Mode / Local Development Overrides
@@ -38,11 +39,15 @@ FORCE_LOCAL_DB = CONTRIBUTOR_MODE or os.environ.get('FORCE_LOCAL_DB', 'False').l
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-getpyqjec-local-key')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is False.")
+    SECRET_KEY = 'django-insecure-getpyqjec-local-key'
 
 _host_ip = os.environ.get('VITE_HOST_IP', '')
 _render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
@@ -88,9 +93,11 @@ INSTALLED_APPS = [
     'core',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
+    'core.middleware.ServerTimingMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -141,9 +148,16 @@ else:
         'default': dj_database_url.config(
             default=db_url,
             conn_max_age=600,
+            # Neon suspends idle compute and drops connections; verify a
+            # persistent connection before reuse instead of failing on it.
+            conn_health_checks=True,
             ssl_require=ssl_require,
         )
     }
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 10
+    if '-pooler' in DATABASES['default'].get('HOST', ''):
+        # PgBouncer (transaction pooling) does not support server-side cursors.
+        DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
 
 # Password validation
@@ -177,6 +191,10 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
+    # Each refresh issues a new refresh token and revokes the old one, so a
+    # stolen or logged-out token cannot be reused.
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 
@@ -239,9 +257,11 @@ if extra_cors:
             if o not in CORS_ALLOWED_ORIGINS:
                 CORS_ALLOWED_ORIGINS.append(o)
 
+# Only first-party subdomains. Do NOT add a *.vercel.app pattern: with credentials
+# enabled, any site deployed on vercel.app could mint access tokens via /auth/refresh/.
+# Add specific preview/mirror origins through the CORS_ALLOWED_ORIGINS env var instead.
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.getpyqjec\.in$",
-    r"^https://.*\.vercel\.app$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -265,6 +285,28 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Start HSTS short; raise (e.g. to 31536000) once HTTPS is confirmed stable everywhere.
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '3600'))
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# ==============================================================================
+# Logging (request timing from core.middleware.ServerTimingMiddleware)
+# ==============================================================================
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '%(asctime)s %(levelname)s %(name)s: %(message)s'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'},
+    },
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
+    'loggers': {
+        'core': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'utils': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
+}
 
 # ==============================================================================
 # Email Configuration (Resend API)

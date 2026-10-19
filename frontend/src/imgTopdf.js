@@ -1,6 +1,6 @@
-import { PDFDocument } from "pdf-lib";
-
+// pdf-lib is loaded on demand so it is not part of the Upload page bundle.
  const createPdfFromImages = async (images) => {
+    const { PDFDocument } = await import("pdf-lib");
     const pdfDoc = await PDFDocument.create();
 
     for (const imgFile of images) {

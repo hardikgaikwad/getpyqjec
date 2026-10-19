@@ -4,7 +4,6 @@ Django>=5.2,<5.3
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
-Markdown==3.10.1
 packaging==26.0
 pikepdf==10.3.0
 PyJWT==2.11.0

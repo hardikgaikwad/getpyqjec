@@ -3,6 +3,12 @@ Curriculum definition for Jabalpur Engineering College (JEC).
 Defines all expected subjects (name, code) per branch and semester.
 """
 
+import logging
+
+from django.db import DatabaseError
+
+logger = logging.getLogger(__name__)
+
 ORDINALS = {
     1: 'first',
     2: 'second',
@@ -347,8 +353,8 @@ def get_expected_subjects(branch: str, semester: int):
             )
             if db_subjs:
                 return db_subjs
-    except Exception:
-        pass
+    except DatabaseError as e:
+        logger.warning(f"Subject lookup failed, using static curriculum: {e}")
 
     ord_name = ORDINALS.get(sem_num)
     if not ord_name:
@@ -384,8 +390,8 @@ def get_subject_name_by_code(code: str, default: str = None) -> str:
         subj = Subject.objects.filter(code__iexact=clean_code).first()
         if subj:
             return subj.name
-    except Exception:
-        pass
+    except DatabaseError as e:
+        logger.warning(f"Subject lookup failed, using static curriculum: {e}")
     return SUBJECT_CODE_TO_NAME.get(clean_code, default if default is not None else code)
 
 

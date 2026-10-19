@@ -14,22 +14,20 @@ const AuthContext = createContext({
 });
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-
-  // On mount, restore from localStorage
-  useEffect(() => {
-    const savedToken = localStorage.getItem("access_token");
-    const savedUser = localStorage.getItem("user");
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        setUser(null);
-      }
+  // Restore synchronously so protected pages don't flash "log in first" on reload.
+  const [token, setToken] = useState(() =>
+    localStorage.getItem("user") ? localStorage.getItem("access_token") : null
+  );
+  const [user, setUser] = useState(() => {
+    if (!localStorage.getItem("access_token")) return null;
+    try {
+      return JSON.parse(localStorage.getItem("user"));
+    } catch {
+      return null;
     }
+  });
 
+  useEffect(() => {
     const handleAuthLogout = () => {
       setToken(null);
       setUser(null);
