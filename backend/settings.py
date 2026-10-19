@@ -147,9 +147,16 @@ else:
         'default': dj_database_url.config(
             default=db_url,
             conn_max_age=600,
+            # Neon suspends idle compute and drops connections; verify a
+            # persistent connection before reuse instead of failing on it.
+            conn_health_checks=True,
             ssl_require=ssl_require,
         )
     }
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 10
+    if '-pooler' in DATABASES['default'].get('HOST', ''):
+        # PgBouncer (transaction pooling) does not support server-side cursors.
+        DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
 
 # Password validation
