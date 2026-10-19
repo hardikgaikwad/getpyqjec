@@ -115,13 +115,13 @@ const uploadData = async (data) => {
   return await res.json();
 };
 
-const fetchExistingPYQs = async (branch, semester, subjectCode) => {
+const fetchExistingPYQs = async (branch, semester, subjectCode, { signal } = {}) => {
   const params = new URLSearchParams({
     branch,
     semester: String(semester),
     subject_code: subjectCode,
   });
-  const res = await fetch(`${API_BASE}/upload/?${params.toString()}`);
+  const res = await fetch(`${API_BASE}/upload/?${params.toString()}`, { signal });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || "Failed to fetch existing PYQs");

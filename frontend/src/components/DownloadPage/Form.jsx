@@ -1,12 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import styles from "./Form.module.css";
-import {
-  branches,
-  subjects,
-  semesters,
-  ordinals,
-} from "../../information";
-import { fetchSubjects } from "../../http";
+import { branches, semesters } from "../../information";
+import useSubjects from "../../hooks/useSubjects";
 import CustomSelect from "../CustomSelect/CustomSelect";
 import Mascot from "../Mascot/Mascot";
 
@@ -42,50 +37,10 @@ export default function FormPYQ({ fetchFn }) {
     }));
   }, [selectedValues.semester]);
 
-  const [dynamicSubjects, setDynamicSubjects] = useState({ current: [], past: [] });
-  const [loadingSubjects, setLoadingSubjects] = useState(false);
-
-  useEffect(() => {
-    if (!selectedValues.semester || !selectedValues.branch) {
-      setDynamicSubjects({ current: [], past: [] });
-      return;
-    }
-
-    let isMounted = true;
-    setLoadingSubjects(true);
-
-    fetchSubjects(selectedValues.branch, selectedValues.semester)
-      .then((data) => {
-        if (isMounted) {
-          setDynamicSubjects({
-            current: data.current_subjects || [],
-            past: data.past_subjects || [],
-          });
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to load dynamic subjects, falling back to static list", err);
-        const sem = selectedValues.semester;
-        const branch = selectedValues.branch;
-        const branchSubjects =
-          Number(sem) <= 2
-            ? subjects.CommonForAllBranches?.[ordinals[sem]]
-            : subjects[branch]?.[ordinals[sem]];
-        if (isMounted && branchSubjects) {
-          setDynamicSubjects({
-            current: branchSubjects.map((s) => ({ code: s[1], name: s[0] })),
-            past: [],
-          });
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoadingSubjects(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedValues.branch, selectedValues.semester]);
+  const { subjects: dynamicSubjects, loading: loadingSubjects } = useSubjects(
+    selectedValues.branch,
+    selectedValues.semester
+  );
 
   const subjectsToShow = useMemo(() => {
     if (!selectedValues.semester || !selectedValues.branch) return [];
