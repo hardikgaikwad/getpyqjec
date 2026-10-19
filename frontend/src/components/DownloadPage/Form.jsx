@@ -139,6 +139,7 @@ export default function FormPYQ({ fetchFn }) {
                 <CustomSelect
                   id="branch"
                   name="branch"
+                  align="right"
                   value={selectedValues.branch}
                   placeholder="Select Branch"
                   options={branchOptions}
@@ -207,6 +208,7 @@ export default function FormPYQ({ fetchFn }) {
                 <label className={styles.label}>To Year</label>
                 <CustomSelect
                   name="to_year"
+                  align="right"
                   value={selectedValues.toYear}
                   placeholder="Select To Year"
                   options={toYearOptions.map((y) => ({ value: String(y), label: String(y) }))}
@@ -221,7 +223,7 @@ export default function FormPYQ({ fetchFn }) {
               </div>
 
               {/* Empty spacer to align with the 3-column row above */}
-              <div className={styles.formGroup} style={{ visibility: "hidden" }}></div>
+              <div className={`${styles.formGroup} ${styles.spacer}`} style={{ visibility: "hidden" }}></div>
             </div>
           </form>
         </div>

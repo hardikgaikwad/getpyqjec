@@ -10,7 +10,8 @@
 .trigger {
   width: 100%;
   box-sizing: border-box;
-  padding: 12px 14px;
+  /* Parents can tighten vertical padding on short screens via --select-pad-y */
+  padding: var(--select-pad-y, 12px) 14px;
   background: rgba(14, 12, 22, 0.70);
   border: 1px solid rgba(180, 160, 220, 0.22);
   border-radius: 8px;
@@ -112,11 +113,10 @@
 }
 
 @media (max-width: 520px) {
+  /* At least as wide as the field, wider for long labels, never off-screen.
+     Fields in a right-hand column use align="right" so they grow leftwards. */
   .dropdown {
-    width: 100%;
-    left: 0;
-    right: 0;
-    max-width: 100%;
+    max-width: calc(100vw - 48px);
   }
 }
 
